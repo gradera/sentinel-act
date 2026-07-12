@@ -1,0 +1,86 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Design tokens for the Web Governance Console.
+ * Base palette follows the Gradera brand (deep navy + teal accent).
+ * Risk-tier and confidence tokens implement the "Trust Gradient" and
+ * "Progressive Disclosure" sections of the Gradera UO UX Design Framework,
+ * mapped onto Sentinel Act's own Tier A/B/C risk policy (see
+ * ux/Sentinel_Act_UX_Brief_Human_Governance.md, section 3).
+ *
+ * NOTE: risk tier (A/B/C, this system's governance gate) and urgency tier
+ * (Attention-Now / In-Motion / Archive, the framework's info-hierarchy
+ * pattern) are deliberately kept as separate token groups below so the
+ * two "tier" concepts never collide in the UI.
+ */
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 230 45% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 230 45% 15%;
+
+    --primary: 231 47% 19%;        /* Gradera navy */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 20% 96%;
+    --secondary-foreground: 231 47% 19%;
+
+    --accent: 172 66% 40%;         /* teal accent */
+    --accent-foreground: 0 0% 100%;
+
+    --muted: 210 20% 96%;
+    --muted-foreground: 220 10% 45%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 15% 88%;
+    --input: 220 15% 88%;
+    --ring: 172 66% 40%;
+    --radius: 0.5rem;
+
+    /* Risk tier (governance gate: A auto-commit, B single reviewer, C maker-checker) */
+    --risk-a: 142 71% 35%;   /* green: no human action */
+    --risk-b: 38 92% 50%;    /* amber: single sign-off */
+    --risk-c: 24 95% 53%;    /* orange: maker-checker */
+    --risk-escalate: 0 72% 51%; /* red: always-escalate, contradiction/grounding failure */
+
+    /* Confidence / grounding signal (Trust Gradient, framework section 1) */
+    --confidence-high: 172 66% 40%;
+    --confidence-medium: 38 92% 50%;
+    --confidence-low: 0 72% 51%;
+
+    /* Urgency tier (Progressive Disclosure, framework section 4) */
+    --urgency-now: 0 72% 51%;
+    --urgency-in-motion: 217 91% 60%;
+    --urgency-archive: 142 71% 35%;
+  }
+
+  .dark {
+    --background: 231 47% 10%;
+    --foreground: 210 20% 96%;
+    --card: 231 40% 13%;
+    --card-foreground: 210 20% 96%;
+    --primary: 172 66% 40%;
+    --primary-foreground: 231 47% 10%;
+    --secondary: 231 30% 18%;
+    --secondary-foreground: 210 20% 96%;
+    --border: 231 25% 22%;
+    --input: 231 25% 22%;
+    --ring: 172 66% 40%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}

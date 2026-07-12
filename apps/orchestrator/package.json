@@ -1,0 +1,22 @@
+{
+  "name": "@sentinel-act/orchestrator",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "lint": "eslint . --max-warnings 0",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@sentinel-act/graph-schema": "workspace:*",
+    "@mastra/core": "^1.50.0"
+  },
+  "devDependencies": {
+    "@sentinel-act/eslint-config": "workspace:*",
+    "@sentinel-act/typescript-config": "workspace:*",
+    "mastra": "^1.18.0",
+    "typescript": "^5.7.0"
+  }
+}
