@@ -31,6 +31,7 @@ export function ConfidenceBadge({
   className?: string;
 }) {
   const b = bucket(score);
+  const percent = Math.round(score * 100);
   return (
     <span
       className={cn(
@@ -38,8 +39,9 @@ export function ConfidenceBadge({
         BUCKET_CLASS[b],
         className
       )}
+      title={`${percent}% ${label}`}
     >
-      <span className="font-semibold">{Math.round(score * 100)}%</span>
+      <span className="font-semibold">{percent}%</span>
       <span className="opacity-80">{label}</span>
     </span>
   );

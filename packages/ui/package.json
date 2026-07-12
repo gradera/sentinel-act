@@ -7,11 +7,15 @@
     "./globals.css": "./src/styles/globals.css",
     "./tailwind.config": "./tailwind.config.ts",
     "./lib/*": "./src/lib/*.ts",
-    "./components/*": "./src/components/*.tsx"
+    "./components/*": "./src/components/*.tsx",
+    "./hooks/*": "./src/hooks/*.ts"
   },
   "scripts": {
-    "lint": "eslint . --max-warnings 0",
-    "typecheck": "tsc --noEmit"
+    "lint": "eslint . --max-warnings 0 && pnpm run lint:no-hardcoded-colors",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint:no-hardcoded-colors": "! grep -rnE \"#[0-9a-fA-F]{3,6}\" src/components"
   },
   "dependencies": {
     "@sentinel-act/graph-schema": "workspace:*",
@@ -19,7 +23,18 @@
     "clsx": "^2.1.1",
     "tailwind-merge": "^2.6.0",
     "lucide-react": "^0.469.0",
-    "@radix-ui/react-slot": "^1.1.1"
+    "@radix-ui/react-slot": "^1.1.1",
+    "@radix-ui/react-dialog": "^1.1.19",
+    "@radix-ui/react-alert-dialog": "^1.1.19",
+    "@radix-ui/react-tabs": "^1.1.17",
+    "@radix-ui/react-tooltip": "^1.2.12",
+    "@radix-ui/react-label": "^2.1.11",
+    "@radix-ui/react-avatar": "^1.2.2",
+    "@radix-ui/react-separator": "^1.1.11",
+    "@radix-ui/react-scroll-area": "^1.2.14",
+    "sonner": "^2.0.7",
+    "diff": "^7.0.0",
+    "next-themes": "^0.4.6"
   },
   "peerDependencies": {
     "react": "^19.0.0",
@@ -31,6 +46,16 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "tailwindcss": "^3.4.17",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "@types/diff": "^7.0.2",
+    "vitest": "^2.1.9",
+    "@vitejs/plugin-react": "^4.5.2",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "jsdom": "^29.1.1",
+    "jest-axe": "^10.0.0",
+    "@types/jest-axe": "^3.5.9",
+    "colord": "^2.9.3",
+    "@testing-library/user-event": "^14.6.1"
   }
 }

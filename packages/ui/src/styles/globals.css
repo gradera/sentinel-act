@@ -73,6 +73,43 @@
     --border: 231 25% 22%;
     --input: 231 25% 22%;
     --ring: 172 66% 40%;
+
+    /*
+     * Dark-tuned risk/confidence/urgency tokens (Spec 14 FR-26).
+     *
+     * These are NOT a uniform "+10-15 lightness" shift off the Figma
+     * spec's starting-point table (ux/Sentinel_Act_Figma_Screen_Design_Spec.md
+     * section 1.2) — that table's own numbers were flagged there as
+     * "recommended, unverified" and, checked against
+     * packages/ui/src/lib/contrast.test.ts (the source of truth), a flat
+     * lightening shift fails WCAG AA for --risk-* and --urgency-* specifically
+     * because those tokens back a *solid-fill, white-text* badge
+     * (RiskTierBadge / UrgencyBadge) — lightening the fill reduces
+     * contrast against white text, it doesn't improve it. --confidence-*
+     * is the opposite case (ConfidenceBadge renders the token as *text*
+     * color against the dark card/background), where lightening is
+     * correct and the Figma table's numbers hold up.
+     *
+     * So: --risk-* and --urgency-* below are tuned darker/more saturated
+     * than a naive lightening would suggest, specifically to keep
+     * white-on-fill contrast >=4.5:1; --confidence-* keeps the Figma
+     * table's values as-is (verified to clear >=4.5:1 against both dark
+     * --card and dark --background). Every value here is asserted by
+     * contrast.test.ts — if you change one, that test is what tells you
+     * whether it still passes, not this comment.
+     */
+    --risk-a: 142 65% 30%;
+    --risk-b: 38 85% 32%;
+    --risk-c: 24 88% 38%;
+    --risk-escalate: 0 72% 50%;
+
+    --confidence-high: 172 60% 52%;
+    --confidence-medium: 38 85% 62%;
+    --confidence-low: 0 68% 63%;
+
+    --urgency-now: 0 72% 50%;
+    --urgency-in-motion: 217 85% 50%;
+    --urgency-archive: 142 65% 30%;
   }
 }
 

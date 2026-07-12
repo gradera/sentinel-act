@@ -14,7 +14,8 @@
     "@sentinel-act/graph-schema": "workspace:*",
     "next": "^15.1.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "next-themes": "^0.4.6"
   },
   "devDependencies": {
     "@sentinel-act/eslint-config": "workspace:*",
