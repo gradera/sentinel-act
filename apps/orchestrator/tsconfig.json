@@ -2,7 +2,15 @@
   "extends": "@sentinel-act/typescript-config/node.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": "src",
+    // Adds "DOM" on top of node.json's ES2022-only lib set. Needed by the
+    // Regulatory Watch and Ingestion Agent (Spec 02), which parses SEBI
+    // listing/detail page HTML via jsdom — jsdom's own type declarations
+    // reference DOM lib globals (Document, Element, Node, ...), which are
+    // otherwise unavailable in a plain Node lib target. Scoped to this app
+    // only; packages/graph-db and other pure-backend packages intentionally
+    // keep the DOM-free ES2022 lib set.
+    "lib": ["ES2022", "DOM"]
   },
   "include": ["src"]
 }

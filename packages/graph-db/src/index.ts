@@ -52,6 +52,10 @@ export { findSimilarClauses } from "./vector-search.js";
 export type { GraphRepository } from "./repositories/base.repository.js";
 export { BaseRepository } from "./repositories/base.repository.js";
 export { CircularRepository } from "./repositories/circular.repository.js";
+// Watch-agent read surface (Spec 02 §3/§4) — see circular-lookups.ts's
+// doc comment for why the fuzzy-scoring boundary sits here, not in
+// apps/orchestrator.
+export { findCircularBySourceHash, findCircularsByTitleFuzzy, titleSimilarity } from "./repositories/circular-lookups.js";
 export { ClauseRepository, deserializeClauseNode, fromGraphEmbedding } from "./repositories/clause.repository.js";
 export { ObligationRepository } from "./repositories/obligation.repository.js";
 export { ProcessTaskRepository } from "./repositories/process-task.repository.js";

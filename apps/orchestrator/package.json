@@ -7,16 +7,21 @@
     "dev": "mastra dev",
     "build": "mastra build",
     "lint": "eslint . --max-warnings 0",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run src/mastra/agents/__tests__"
   },
   "dependencies": {
     "@sentinel-act/graph-schema": "workspace:*",
-    "@mastra/core": "^1.50.0"
+    "@sentinel-act/graph-db": "workspace:*",
+    "@mastra/core": "^1.50.0",
+    "jsdom": "^29.1.1"
   },
   "devDependencies": {
     "@sentinel-act/eslint-config": "workspace:*",
     "@sentinel-act/typescript-config": "workspace:*",
+    "@types/jsdom": "^28.0.3",
     "mastra": "^1.18.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.9"
   }
 }

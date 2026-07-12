@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head><title>SEBI - Circulars</title></head>
+<body>
+<!--
+  Models SEBI having changed its listing page markup (Acceptance
+  Criterion 4 / FR-5): the row container is now `table.circulars-table`
+  instead of the configured `table.circular-listing`, so
+  LISTING_CONFIG.rowSelector ("table.circular-listing tbody tr") matches
+  zero rows even though the page clearly still has listing content.
+-->
+<nav class="site-nav">Home | Circulars | About | Search</nav>
+<table class="circulars-table">
+  <thead>
+    <tr><th>Title</th><th>Date</th><th>Category</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="title"><a href="/circulars/2026/enhanced-due-diligence.html">SEBI Circular on Enhanced Due Diligence for Stockbrokers</a></td>
+      <td class="date">July 10, 2026</td>
+      <td class="category">Stockbroker</td>
+    </tr>
+  </tbody>
+</table>
+<footer class="site-footer">&copy; 2026 Securities and Exchange Board of India. All rights reserved.</footer>
+</body>
+</html>
