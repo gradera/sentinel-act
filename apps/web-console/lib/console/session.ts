@@ -114,3 +114,25 @@ export function requireRole(session: ReviewerSession, allowedRoles: readonly Rev
  *  reassignment") — a backup reviewer who has been reassigned an item must
  *  be able to read and act on it. */
 export const OPERATOR_MODE_ROLES: readonly ReviewerRole[] = ["compliance_officer", "senior_compliance_officer", "backup_reviewer"];
+
+/** Spec 10 §1/§7 (NFR-5's assumed `requireRole` boundary): role guard for
+ *  every route under `app/api/audit/**` (Observer mode / Compliance
+ *  Register Export). Spec 10 §1 opens with "This unit is the Compliance
+ *  Head / auditor's entire surface" (singular persona), and Spec 09 FR-8's
+ *  own doc comment on `OPERATOR_MODE_ROLES` above is explicit that the
+ *  split is symmetric: "`GET /api/console/queue` (`compliance_head` gets
+ *  403 here; use Spec 10's read-only endpoint instead)" — i.e.
+ *  `compliance_head` is redirected to THIS route tree specifically,
+ *  not merely "also allowed" alongside it. Neither spec's text
+ *  affirmatively states whether `compliance_officer`/
+ *  `senior_compliance_officer`/`backup_reviewer` may ALSO view this
+ *  read-only surface (nothing here would be unsafe if they could — the
+ *  FR-11a guard inside AuditQueryService already hides an unresolved
+ *  Tier C/ESCALATE maker decision from every caller regardless of role),
+ *  but absent an explicit "also allowed" statement, this is kept
+ *  `compliance_head`-exclusive: the two mode role-sets are disjoint,
+ *  mirroring the disjoint-by-design read of FR-8. If a future spec
+ *  explicitly wants Operator-mode roles to read this screen too (e.g. a
+ *  reviewer checking historical context on their own decisions), widen
+ *  this constant — do not special-case it deeper in each route handler. */
+export const OBSERVER_MODE_ROLES: readonly ReviewerRole[] = ["compliance_head"];

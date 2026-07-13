@@ -69,3 +69,22 @@ export { HumanReviewRepository } from "./repositories/human-review.repository.js
 // entry point.
 export { GraphWriter } from "./commit/graph-writer.js";
 export { validateCommitPlan, commitPlanSchema } from "./commit/commit-plan-validator.js";
+
+// Observer mode / Compliance Register Export read path (Spec 10 §4, §5.2,
+// §5.4). Types only from audit-query.types.ts here — packages/report-
+// generation (Spec 10 §5.6) imports RegisterQueryRow/ComplianceRegisterRow/
+// etc. from this package's public entry point rather than reaching into
+// packages/graph-db/src/queries/audit-query.types.ts directly.
+export { AuditQueryService } from "./queries/audit-query.js";
+export { ExportJobStore } from "./queries/export-job-store.js";
+export type {
+  AuditQueryFilters,
+  AuditTrailRow,
+  AuditQueryResponse,
+  RegisterQueryRow,
+  ExportFormat,
+  ExportJobStatus,
+  ComplianceRegisterExportRequest,
+  ComplianceRegisterExportJob,
+  ComplianceRegisterRow
+} from "./queries/audit-query.types.js";

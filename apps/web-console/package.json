@@ -7,12 +7,14 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint . --max-warnings 0",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run lib/console app/api/console app/api/audit scripts"
   },
   "dependencies": {
     "@sentinel-act/ui": "workspace:*",
     "@sentinel-act/graph-schema": "workspace:*",
     "@sentinel-act/graph-db": "workspace:*",
+    "@sentinel-act/report-generation": "workspace:*",
     "next": "^15.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
