@@ -258,7 +258,13 @@ function makeHarness(states: ObligationPipelineState[], seed: Obligation[] = [])
       const state = byRun.get(runId)!;
       if (reviewOutcome === "AWAITING_SECOND_REVIEWER") {
         makerByRun.set(runId, review.reviewer_id);
-        await index.record({ obligation_id: state.obligation_id, runId, stepId: "awaitSecondHumanReview" });
+        await index.record({
+          obligation_id: state.obligation_id,
+          runId,
+          stepId: "awaitSecondHumanReview",
+          tier: state.tierDecision.tier === "ESCALATE" ? "C" : (state.tierDecision.tier as "B" | "C"),
+          suspendedAt: NOW
+        });
         suspendedStep.set(runId, "awaitSecondHumanReview");
         return { finalStatus: "still_pending" as const };
       }
@@ -299,7 +305,13 @@ async function preReviewCommit(h: Harness, state: ObligationPipelineState): Prom
   const plan = buildPreReviewCommitPlan({ state, categoryIdByName: {}, effectiveDate: EFF });
   await h.runtime.graphWriter.commitProposal(plan);
   if (state.tierDecision.tier !== "A") {
-    await h.index.record({ obligation_id: state.obligation_id, runId: state.runId, stepId: "awaitHumanReview" });
+    await h.index.record({
+      obligation_id: state.obligation_id,
+      runId: state.runId,
+      stepId: "awaitHumanReview",
+      tier: state.tierDecision.tier === "ESCALATE" ? "C" : (state.tierDecision.tier as "B" | "C"),
+      suspendedAt: NOW
+    });
   }
 }
 

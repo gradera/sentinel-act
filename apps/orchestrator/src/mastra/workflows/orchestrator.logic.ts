@@ -300,21 +300,65 @@ export function buildFinalizeCommitPlan(input: FinalizeCommitInput): CommitPlan 
 // the single-process default and the test double.
 // ---------------------------------------------------------------------------
 
+type SuspendedRunRecord = {
+  runId: string;
+  stepId: SuspendedRunIndexEntry["stepId"];
+  tier: SuspendedRunIndexEntry["tier"];
+  suspendedAt: string;
+};
+
 export class InMemorySuspendedRunIndex implements SuspendedRunIndexPort {
-  private readonly runs = new Map<string, { runId: string; stepId: SuspendedRunIndexEntry["stepId"] }>();
+  private readonly runs = new Map<string, SuspendedRunRecord>();
   private readonly claims = new Map<string, { maker: string | null; checker: string | null }>();
+  /** FR-24a-adjacent: idempotent due-soon-reminder dedup (Spec 11 §5.3),
+   *  keyed `${obligation_id}:${reviewerId}`. */
+  private readonly dueSoonReminders = new Set<string>();
 
   async record(entry: SuspendedRunIndexEntry): Promise<void> {
-    this.runs.set(entry.obligation_id, { runId: entry.runId, stepId: entry.stepId });
+    this.runs.set(entry.obligation_id, {
+      runId: entry.runId,
+      stepId: entry.stepId,
+      tier: entry.tier,
+      suspendedAt: entry.suspendedAt
+    });
   }
 
   async find(obligation_id: string): Promise<{ runId: string; stepId: SuspendedRunIndexEntry["stepId"] } | null> {
-    return this.runs.get(obligation_id) ?? null;
+    const entry = this.runs.get(obligation_id);
+    return entry ? { runId: entry.runId, stepId: entry.stepId } : null;
   }
 
   async clear(obligation_id: string): Promise<void> {
     this.runs.delete(obligation_id);
     this.claims.delete(obligation_id);
+    const prefix = `${obligation_id}:`;
+    for (const key of this.dueSoonReminders) {
+      if (key.startsWith(prefix)) {
+        this.dueSoonReminders.delete(key);
+      }
+    }
+  }
+
+  /** Spec 11 §5.3: every entry still in `this.runs` IS active — `.clear()`
+   *  already deletes an obligation's entry the moment it is no longer
+   *  suspended (finalizeCommit), so there is no separate "cleared" flag to
+   *  filter on here. Read-only, never mutates. */
+  async listActive(): Promise<Array<SuspendedRunIndexEntry & { runId: string }>> {
+    return Array.from(this.runs.entries()).map(([obligation_id, entry]) => ({
+      obligation_id,
+      runId: entry.runId,
+      stepId: entry.stepId,
+      tier: entry.tier,
+      suspendedAt: entry.suspendedAt
+    }));
+  }
+
+  async hasSentDueSoonReminder(obligation_id: string, reviewerId: string): Promise<boolean> {
+    return this.dueSoonReminders.has(`${obligation_id}:${reviewerId}`);
+  }
+
+  async markDueSoonReminderSent(obligation_id: string, reviewerId: string): Promise<void> {
+    this.dueSoonReminders.add(`${obligation_id}:${reviewerId}`);
   }
 
   /** §8 open-item-0: atomically assign the caller to whichever slot is

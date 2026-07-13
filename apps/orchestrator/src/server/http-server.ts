@@ -2,22 +2,23 @@
 // orchestrator.workflow.ts. Hand-rolled on Node's built-in `node:http` only
 // — no framework dependency (Hono is present transitively via Mastra's own
 // dev server but is not a declared/resolvable dependency of this package;
-// see the module-level note in start.ts). Six routes:
+// see the module-level note in start.ts). Seven routes:
 //
 //   GET  /api/orchestrator/obligations/:obligationId/review-gate
 //   POST /api/orchestrator/obligations/review-gate/batch
 //   GET  /api/orchestrator/obligations/:obligationId/run-ref
 //   POST /api/orchestrator/obligations/:obligationId/claim
 //   POST /api/orchestrator/obligations/:obligationId/resume
+//   GET  /api/orchestrator/review-sla/due-soon-and-breached
 //   GET  /healthz
 //
 // Server-to-server only (Spec 09's BFF, Spec 11's Slack backend) — never
 // called from a browser. Auth is `SENTINEL_SERVICE_JWT_SECRET` via
 // `assertServiceAuth`, already implemented in orchestrator.workflow.ts.
 //
-// Two additions on top of the original four routes (Spec 09 stage-2 gaps,
-// both added in the same hand-rolled style as the rest of this file, no
-// new framework/dependency):
+// Three additions on top of the original four routes (Spec 09 stage-2
+// gaps plus the Spec 11 SLA-feed gap, all added in the same hand-rolled
+// style as the rest of this file, no new framework/dependency):
 //
 //   GET  /api/orchestrator/obligations/:obligationId/run-ref
 //     Spec 09's BFF needs `{runId, stepId}` to build a `POST .../resume`
@@ -35,6 +36,17 @@
 //     the BFF's perspective, no new dependency, same auth/error shape as
 //     the single-item route it wraps (`handleReviewGateRequest` +
 //     `index.getClaimSlots`, per obligation, in a loop).
+//
+//   GET  /api/orchestrator/review-sla/due-soon-and-breached
+//     Spec 11 §5.3's proposed SLA-breach feed, closing the gap the Slack
+//     scheduler's `createHttpSlaBreachFeedPort`
+//     (../slack/sla-reminder-scheduler.ts) has always called. Simplest
+//     read-only, no-path-param GET route in this file — mirrors
+//     `handleRunRef`'s auth/error shape exactly; backed by
+//     `handleSlaBreachFeedRequest` (orchestrator.sla-feed.ts), which is
+//     honest about the two product gaps it does NOT invent policy for
+//     (Tier B due-soon detection, all breach/backup-reviewer
+//     reassignment) — see that module's own header comment.
 import { createServer } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 
@@ -46,6 +58,7 @@ import {
   resumeOrchestratorRun
 } from "../mastra/workflows/orchestrator.workflow.js";
 import type { ClaimRequest, ReviewGateRequest } from "../mastra/workflows/orchestrator.workflow.js";
+import { handleSlaBreachFeedRequest } from "../mastra/workflows/orchestrator.sla-feed.js";
 import {
   NotAssignedError,
   OrchestratorError,
@@ -55,6 +68,7 @@ import {
 } from "../mastra/workflows/orchestrator.errors.js";
 import { toWireReviewGateView } from "../mastra/workflows/orchestrator.review-gate-view.js";
 import type { HumanReviewSubmissionEvent } from "../mastra/workflows/orchestrator.types.js";
+import { dispatchSlackRequest, getSlackAppDeps, SlackConfigError } from "../slack/app.js";
 
 // ---------------------------------------------------------------------------
 // Small local error type for hand-written request validation (400s). Kept
@@ -404,6 +418,21 @@ async function handleResume(req: IncomingMessage, res: ServerResponse, obligatio
 }
 
 // ---------------------------------------------------------------------------
+// Route: GET /api/orchestrator/review-sla/due-soon-and-breached
+// ---------------------------------------------------------------------------
+
+async function handleSlaBreachFeed(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  try {
+    const authorization = getHeaderAsString(req, "authorization");
+    assertServiceAuth(authorization);
+    const result = await handleSlaBreachFeedRequest({ index: getOrchestratorRuntime().index });
+    sendJson(res, 200, result);
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Route: GET /healthz (Spec 15 §5.3 — web-console pings ORCHESTRATOR_BASE_URL
 // + "/healthz", not "/readyz").
 // ---------------------------------------------------------------------------
@@ -421,6 +450,7 @@ const REVIEW_GATE_BATCH_PATH = "/api/orchestrator/obligations/review-gate/batch"
 const RUN_REF_RE = /^\/api\/orchestrator\/obligations\/([^/]+)\/run-ref$/;
 const CLAIM_RE = /^\/api\/orchestrator\/obligations\/([^/]+)\/claim$/;
 const RESUME_RE = /^\/api\/orchestrator\/obligations\/([^/]+)\/resume$/;
+const SLA_BREACH_FEED_PATH = "/api/orchestrator/review-sla/due-soon-and-breached";
 
 async function dispatch(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const method = req.method ?? "GET";
@@ -441,6 +471,15 @@ async function dispatch(req: IncomingMessage, res: ServerResponse): Promise<void
   // dispatcher's intent obvious.
   if (method === "POST" && pathname === REVIEW_GATE_BATCH_PATH) {
     await handleReviewGateBatch(req, res);
+    return;
+  }
+
+  // Another fixed, literal path with no obligationId segment (same
+  // ordering rationale as REVIEW_GATE_BATCH_PATH above — its prefix
+  // `/api/orchestrator/review-sla/` never collides with
+  // `/api/orchestrator/obligations/...`).
+  if (method === "GET" && pathname === SLA_BREACH_FEED_PATH) {
+    await handleSlaBreachFeed(req, res);
     return;
   }
 
@@ -466,6 +505,29 @@ async function dispatch(req: IncomingMessage, res: ServerResponse): Promise<void
   if (method === "POST" && resumeMatch) {
     await handleResume(req, res, decodeURIComponent(resumeMatch[1]));
     return;
+  }
+
+  // Spec 11 §5.1: /api/slack/* is mounted on this SAME process (not a
+  // second server) — see apps/orchestrator/src/slack/app.ts's own header
+  // comment for why this reuses http-server.ts's hand-rolled node:http
+  // conventions instead of adding @slack/bolt. If Slack env vars are not
+  // configured for this deployment, dispatchSlackRequest is never reached
+  // (SlackConfigError -> 404, since Slack is an optional supplementary
+  // surface, never a hard dependency of the rest of this process).
+  if (pathname.startsWith("/api/slack/")) {
+    try {
+      const handled = await dispatchSlackRequest(req, res, pathname, getSlackAppDeps());
+      if (handled) {
+        return;
+      }
+    } catch (err) {
+      if (err instanceof SlackConfigError) {
+        sendJson(res, 404, { error: "NOT_FOUND" });
+        return;
+      }
+      handleError(res, err);
+      return;
+    }
   }
 
   sendJson(res, 404, { error: "NOT_FOUND" });

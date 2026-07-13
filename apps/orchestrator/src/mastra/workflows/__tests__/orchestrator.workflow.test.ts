@@ -432,7 +432,7 @@ describe("resumeOrchestratorRun — FR-21a ordering", () => {
   it("calls recordHumanReview and RESOLVES it BEFORE run.resume (regression for the write-path bug)", async () => {
     const order: string[] = [];
     const { deps, record, resume } = buildResumeDeps({ order });
-    await deps.index.record({ obligation_id: "obl-1", runId: "run-1", stepId: "awaitHumanReview" });
+    await deps.index.record({ obligation_id: "obl-1", runId: "run-1", stepId: "awaitHumanReview", tier: "B", suspendedAt: "2026-07-13T09:00:00.000Z" });
 
     await resumeOrchestratorRun(makeSubmissionEvent(), deps);
 
@@ -444,7 +444,7 @@ describe("resumeOrchestratorRun — FR-21a ordering", () => {
   it("does NOT call run.resume when recordHumanReview throws; error propagates unchanged", async () => {
     const boom = new Error("ReviewerIndependenceError from Spec 07");
     const { deps, resume } = buildResumeDeps({ recordImpl: async () => { throw boom; } });
-    await deps.index.record({ obligation_id: "obl-1", runId: "run-1", stepId: "awaitHumanReview" });
+    await deps.index.record({ obligation_id: "obl-1", runId: "run-1", stepId: "awaitHumanReview", tier: "B", suspendedAt: "2026-07-13T09:00:00.000Z" });
 
     await expect(resumeOrchestratorRun(makeSubmissionEvent(), deps)).rejects.toBe(boom);
     expect(resume).not.toHaveBeenCalled();
@@ -454,27 +454,27 @@ describe("resumeOrchestratorRun — FR-21a ordering", () => {
 describe("resumeOrchestratorRun — validation (§8)", () => {
   it("rejects a runId mismatch (FR-21)", async () => {
     const { deps } = buildResumeDeps();
-    await deps.index.record({ obligation_id: "obl-1", runId: "run-OTHER", stepId: "awaitHumanReview" });
+    await deps.index.record({ obligation_id: "obl-1", runId: "run-OTHER", stepId: "awaitHumanReview", tier: "B", suspendedAt: "2026-07-13T09:00:00.000Z" });
     await expect(resumeOrchestratorRun(makeSubmissionEvent(), deps)).rejects.toBeInstanceOf(ResumeValidationError);
   });
 
   it("rejects an obligation_id mismatch between envelope and review", async () => {
     const { deps } = buildResumeDeps();
-    await deps.index.record({ obligation_id: "obl-1", runId: "run-1", stepId: "awaitHumanReview" });
+    await deps.index.record({ obligation_id: "obl-1", runId: "run-1", stepId: "awaitHumanReview", tier: "B", suspendedAt: "2026-07-13T09:00:00.000Z" });
     const event = makeSubmissionEvent({ obligation_id: "obl-DIFFERENT" });
     await expect(resumeOrchestratorRun(event, deps)).rejects.toBeInstanceOf(ResumeValidationError);
   });
 
   it("rejects a wrong stepId for the run's actual suspended step", async () => {
     const { deps } = buildResumeDeps();
-    await deps.index.record({ obligation_id: "obl-1", runId: "run-1", stepId: "awaitHumanReview" });
+    await deps.index.record({ obligation_id: "obl-1", runId: "run-1", stepId: "awaitHumanReview", tier: "B", suspendedAt: "2026-07-13T09:00:00.000Z" });
     const event = makeSubmissionEvent({}, { stepId: "awaitSecondHumanReview" });
     await expect(resumeOrchestratorRun(event, deps)).rejects.toBeInstanceOf(ResumeValidationError);
   });
 
   it("rejects same-reviewer maker/checker with ReviewerIndependenceError, no record call (FR-25)", async () => {
     const { deps, record, resume } = buildResumeDeps({ suspendedStep: "awaitSecondHumanReview", makerReviewerId: "co-anita" });
-    await deps.index.record({ obligation_id: "obl-1", runId: "run-1", stepId: "awaitSecondHumanReview" });
+    await deps.index.record({ obligation_id: "obl-1", runId: "run-1", stepId: "awaitSecondHumanReview", tier: "C", suspendedAt: "2026-07-13T09:00:00.000Z" });
     const event = makeSubmissionEvent({ reviewer_id: "co-anita", tier: "C", rationale: "x" }, { stepId: "awaitSecondHumanReview" });
     await expect(resumeOrchestratorRun(event, deps)).rejects.toBeInstanceOf(ReviewerIndependenceError);
     expect(record).not.toHaveBeenCalled();
@@ -483,7 +483,7 @@ describe("resumeOrchestratorRun — validation (§8)", () => {
 
   it("returns { resumed: false } for an already-resumed step (idempotent replay)", async () => {
     const { deps, record, resume } = buildResumeDeps({ suspendedStep: null });
-    await deps.index.record({ obligation_id: "obl-1", runId: "run-1", stepId: "awaitHumanReview" });
+    await deps.index.record({ obligation_id: "obl-1", runId: "run-1", stepId: "awaitHumanReview", tier: "B", suspendedAt: "2026-07-13T09:00:00.000Z" });
     const out = await resumeOrchestratorRun(makeSubmissionEvent(), deps);
     expect(out.resumed).toBe(false);
     expect(record).not.toHaveBeenCalled();
@@ -501,7 +501,7 @@ describe("resumeOrchestratorRun — validation (§8)", () => {
 describe("resumeOrchestratorRun — FR-20/FR-31 claimed-slot enforcement", () => {
   it("Tier B never requires a claimed slot (no maker/checker split, no claim() call made)", async () => {
     const { deps, record, resume } = buildResumeDeps();
-    await deps.index.record({ obligation_id: "obl-1", runId: "run-1", stepId: "awaitHumanReview" });
+    await deps.index.record({ obligation_id: "obl-1", runId: "run-1", stepId: "awaitHumanReview", tier: "B", suspendedAt: "2026-07-13T09:00:00.000Z" });
     const event = makeSubmissionEvent({ tier: "B", reviewer_id: "co-anita" });
     await resumeOrchestratorRun(event, deps);
     expect(record).toHaveBeenCalledTimes(1);
@@ -510,7 +510,7 @@ describe("resumeOrchestratorRun — FR-20/FR-31 claimed-slot enforcement", () =>
 
   it("rejects a Tier C maker resume with NotAssignedError when no slot has ever been claimed", async () => {
     const { deps, record, resume } = buildResumeDeps();
-    await deps.index.record({ obligation_id: "obl-1", runId: "run-1", stepId: "awaitHumanReview" });
+    await deps.index.record({ obligation_id: "obl-1", runId: "run-1", stepId: "awaitHumanReview", tier: "C", suspendedAt: "2026-07-13T09:00:00.000Z" });
     const event = makeSubmissionEvent({ tier: "C", reviewer_id: "someone", rationale: "x" });
     await expect(resumeOrchestratorRun(event, deps)).rejects.toBeInstanceOf(NotAssignedError);
     expect(record).not.toHaveBeenCalled();
@@ -519,7 +519,7 @@ describe("resumeOrchestratorRun — FR-20/FR-31 claimed-slot enforcement", () =>
 
   it("rejects a Tier C maker resume with NotAssignedError when a DIFFERENT reviewer holds the claimed maker slot", async () => {
     const { deps, record, resume } = buildResumeDeps();
-    await deps.index.record({ obligation_id: "obl-1", runId: "run-1", stepId: "awaitHumanReview" });
+    await deps.index.record({ obligation_id: "obl-1", runId: "run-1", stepId: "awaitHumanReview", tier: "C", suspendedAt: "2026-07-13T09:00:00.000Z" });
     await deps.index.claim("obl-1", "co-anita");
     const event = makeSubmissionEvent({ tier: "C", reviewer_id: "someone-else", rationale: "x" });
     await expect(resumeOrchestratorRun(event, deps)).rejects.toBeInstanceOf(NotAssignedError);
@@ -529,7 +529,7 @@ describe("resumeOrchestratorRun — FR-20/FR-31 claimed-slot enforcement", () =>
 
   it("accepts a Tier C maker resume when the reviewer genuinely holds the claimed maker slot", async () => {
     const { deps, record, resume } = buildResumeDeps();
-    await deps.index.record({ obligation_id: "obl-1", runId: "run-1", stepId: "awaitHumanReview" });
+    await deps.index.record({ obligation_id: "obl-1", runId: "run-1", stepId: "awaitHumanReview", tier: "C", suspendedAt: "2026-07-13T09:00:00.000Z" });
     await deps.index.claim("obl-1", "co-anita");
     const event = makeSubmissionEvent({ tier: "C", reviewer_id: "co-anita", rationale: "x" });
     await resumeOrchestratorRun(event, deps);
@@ -539,7 +539,7 @@ describe("resumeOrchestratorRun — FR-20/FR-31 claimed-slot enforcement", () =>
 
   it("rejects a Tier C checker resume with NotAssignedError when the checker slot was never claimed (distinct reviewer from maker, so ReviewerIndependenceError does not fire first)", async () => {
     const { deps, record, resume } = buildResumeDeps({ suspendedStep: "awaitSecondHumanReview", makerReviewerId: "co-anita" });
-    await deps.index.record({ obligation_id: "obl-1", runId: "run-1", stepId: "awaitSecondHumanReview" });
+    await deps.index.record({ obligation_id: "obl-1", runId: "run-1", stepId: "awaitSecondHumanReview", tier: "C", suspendedAt: "2026-07-13T09:00:00.000Z" });
     const event = makeSubmissionEvent({ reviewer_id: "co-bob", tier: "C", rationale: "x" }, { stepId: "awaitSecondHumanReview" });
     await expect(resumeOrchestratorRun(event, deps)).rejects.toBeInstanceOf(NotAssignedError);
     expect(record).not.toHaveBeenCalled();
@@ -548,7 +548,7 @@ describe("resumeOrchestratorRun — FR-20/FR-31 claimed-slot enforcement", () =>
 
   it("accepts a Tier C checker resume when the reviewer genuinely holds the claimed checker slot", async () => {
     const { deps, record, resume } = buildResumeDeps({ suspendedStep: "awaitSecondHumanReview", makerReviewerId: "co-anita" });
-    await deps.index.record({ obligation_id: "obl-1", runId: "run-1", stepId: "awaitSecondHumanReview" });
+    await deps.index.record({ obligation_id: "obl-1", runId: "run-1", stepId: "awaitSecondHumanReview", tier: "C", suspendedAt: "2026-07-13T09:00:00.000Z" });
     await deps.index.claim("obl-1", "co-anita"); // maker
     await deps.index.claim("obl-1", "co-bob"); // checker
     const event = makeSubmissionEvent({ reviewer_id: "co-bob", tier: "C", rationale: "x" }, { stepId: "awaitSecondHumanReview" });

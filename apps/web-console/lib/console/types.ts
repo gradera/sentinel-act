@@ -34,98 +34,48 @@ import type {
   ReviewDecision
 } from "@sentinel-act/graph-schema";
 import type { LineageStep } from "@sentinel-act/ui/components/governance/lineage-breadcrumb";
+// Local-scope import — ONLY the names this file's OWN interfaces
+// reference below (SlaState: QueueItemSummary/ObligationDetailResponse;
+// TierCGateStatus: TierCViewerQueueState; ReviewGateView:
+// ObligationDetailResponse) — separate from the
+// `export type {...} from "@sentinel-act/review-contracts"` re-export
+// shim further down, which covers the full extracted set (including
+// names this file itself never references locally, e.g.
+// SubmitDecisionResponse) for OTHER files' `import ... from "./types"`.
+// A plain `export ... from` re-export never brings a name into this
+// file's own local scope, so any name used below must ALSO appear in
+// this import.
+import type { SlaState, TierCGateStatus, ReviewGateView } from "@sentinel-act/review-contracts";
 
 // ---------------------------------------------------------------------------
-// Session (application-level, not a graph node) — unchanged from Spec 09 §4.
+// Spec 11 §3/§13 migration note: ReviewerRole/ReviewerSession/SlaState/
+// TierCGateStatus/TierCReviewGateView/TierBReviewGateView/
+// EscalateReviewGateView/ReviewGateView/DecisionAction/
+// SubmitDecisionRequest/SubmitDecisionResponse used to be declared
+// directly in this file. They now have two consumers across two apps
+// (apps/web-console and apps/orchestrator's Slack gateway), so they were
+// extracted verbatim into packages/review-contracts/src/console-types.ts.
+// This block is a re-export SHIM (§13's recommended default: "move the
+// types verbatim, leave a re-export shim at the old path for one release
+// ... remove the shim once both apps are confirmed on the new import") —
+// every other file in this app that imports these names from "./types"
+// keeps working unchanged. New code in this app should prefer importing
+// directly from "@sentinel-act/review-contracts".
 // ---------------------------------------------------------------------------
 
-export type ReviewerRole =
-  | "compliance_officer" // Tier B primary reviewer
-  | "senior_compliance_officer" // Tier C reviewer
-  | "backup_reviewer" // appears only on SLA breach reassignment
-  | "compliance_head"; // read-only, Observer mode (Spec 10) — 403 on this app's write routes
-
-export interface ReviewerSession {
-  reviewerId: string; // stable id, matches HumanReview.reviewer_id once a decision is recorded
-  name: string;
-  email: string;
-  role: ReviewerRole;
-}
-
-// ---------------------------------------------------------------------------
-// SLA state (queue + detail). See sla.ts for the derivation function and
-// the named `reviewSlaHours`/`SLA_DUE_SOON_WINDOW_HOURS` constants.
-//
-// Deliberately a 3-value vocabulary, distinct from packages/ui's 3-value
-// `UrgencyLevel` ("now"/"in-motion"/"archive", Tier-1/2/3 progressive
-// disclosure) per docs/specs/00-context-and-conventions.md's "risk tier
-// vs urgency tier" convention: SlaState is Spec 09's own reviewer-SLA
-// vocabulary ("ok"/"due_soon"/"breached"), not the UrgencyBadge one, even
-// though sla.ts's threshold logic intentionally mirrors computeUrgency's
-// semantics (decided items and threshold math), because a later stage
-// still needs to map SlaState -> UrgencyLevel wherever UrgencyBadge is
-// reused (Spec 09 Task 6, SlaBanner).
-// ---------------------------------------------------------------------------
-
-export type SlaState = "ok" | "due_soon" | "breached";
-
-// ---------------------------------------------------------------------------
-// Orchestrator's real WIRE review-gate contract (FR-24a).
-//
-// UPDATED (spec-09-stage-2): apps/orchestrator now has an HTTP layer
-// (apps/orchestrator/src/server/http-server.ts) that does NOT hand back
-// its own internal 4-value `ReviewGateStatus`/`ReviewGateView`
-// (orchestrator.logic.ts's `deriveReviewGateView`) directly. Instead it
-// runs that internal view through
-// `apps/orchestrator/src/mastra/workflows/orchestrator.review-gate-view.ts`'s
-// `toWireReviewGateView`, which produces exactly this spec's originally
-// proposed §4 shape — a `kind`-discriminated union with the 5-value
-// `TierCGateStatus` — so, contrary to the previous revision of this file's
-// comment, the wire shape now DOES match Spec 09 §4 literally. This is a
-// STRUCTURAL COPY of `WireReviewGateView` from that file (see the
-// importability note at the top of this file for why it can't be a real
-// `import type`) — keep in lockstep by hand if the orchestrator's wire
-// transform changes. See review-gate-adapter.ts for the mapping helpers a
-// later stage uses to bridge this shape to packages/ui's `IndependenceGate`
-// component (which uses yet a different vocabulary, `IndependenceState`).
-// ---------------------------------------------------------------------------
-
-export type TierCGateStatus =
-  | "unclaimed" // no reviewer has claimed either slot yet (or viewer is not entitled to know more)
-  | "claimed_by_viewer" // viewer holds a slot, has not decided
-  | "viewer_submitted_awaiting_peer" // viewer decided, peer has not (yet) — independence boundary
-  | "resolved_agree" // both decided, same decision -> committed/rejected
-  | "resolved_disagree"; // both decided, different decision -> escalated
-
-/** THE independence guarantee lives in this type: `reveal` is only ever
- *  non-null when `status` starts with `"resolved_"` — i.e. after BOTH
- *  reviewers have submitted. There is no field on this type, at any
- *  nesting depth, that can carry one reviewer's decision/rationale to the
- *  other before that point. Computed server-side by
- *  `toWireReviewGateView`, which is itself backed by Spec 07's
- *  `getReviewsVisibleTo` per-caller redaction — never filtered
- *  client-side. */
-export interface TierCReviewGateView {
-  kind: "tier_c";
-  rationaleRequired: true;
-  viewerSlot: "maker" | "checker" | null;
-  status: TierCGateStatus;
-  reveal: { reviews: HumanReview[]; agreement: boolean } | null;
-}
-
-export interface TierBReviewGateView {
-  kind: "tier_b";
-  rationaleRequired: false;
-  existingDecision: HumanReview | null; // non-null once decided (renders as read-only confirmation)
-}
-
-export interface EscalateReviewGateView {
-  kind: "escalate";
-  rationaleRequired: true; // required to reject; approve is not offered at all (FR-27)
-  existingDecision: HumanReview | null;
-}
-
-export type ReviewGateView = TierBReviewGateView | TierCReviewGateView | EscalateReviewGateView;
+export type {
+  ReviewerRole,
+  ReviewerSession,
+  SlaState,
+  TierCGateStatus,
+  TierCReviewGateView,
+  TierBReviewGateView,
+  EscalateReviewGateView,
+  ReviewGateView,
+  DecisionAction,
+  SubmitDecisionRequest,
+  SubmitDecisionResponse
+} from "@sentinel-act/review-contracts";
 
 // ---------------------------------------------------------------------------
 // Queue (screen 1)
@@ -295,41 +245,12 @@ export interface ObligationDetailResponse {
 }
 
 // ---------------------------------------------------------------------------
-// Decision submission (screen 3 / sign-off panel)
+// Decision submission (screen 3 / sign-off panel) — DecisionAction /
+// SubmitDecisionRequest / SubmitDecisionResponse now live in
+// @sentinel-act/review-contracts (see the re-export shim at the top of
+// this file); the original doc comment explaining "escalate_to_tier_c"'s
+// history moved with them to console-types.ts.
 // ---------------------------------------------------------------------------
-
-/** GAP vs the real data model, intentionally left as an extension point:
- *  the real `ReviewDecision` (graph-schema/src/nodes.ts) is exactly
- *  `"approve" | "reject"` — there is no `"escalate_to_tier_c"` value, and
- *  `recordHumanReview` (monitoring-and-audit.agent.ts) would reject any
- *  other string with a `ValidationError`. `"escalate_to_tier_c"` is a
- *  BFF-level *routing* concept (Spec 09 FR-28: an ESCALATE item's
- *  `Obligation.status` moves to `"tier_c_review"` and it re-enters the
- *  Tier C maker-checker flow) — it is NOT submitted to
- *  `recordHumanReview`/`resumeOrchestratorRun` as a `HumanReview.decision`
- *  at all. A later stage (BFF route handlers) must branch on this value
- *  BEFORE calling orchestrator-client.ts's `submitDecision`, not pass it
- *  through.
- *  RESOLVED (spec-09-stage-2): no such mechanism exists, and — per the
- *  full analysis in items/[obligationId]/decisions/route.ts's top-of-file
- *  doc comment — none can, given the real workflow graph (ESCALATE items
- *  already run through the exact same dual-review suspend/claim flow as
- *  Tier C from the moment they're routed, so there is no separate
- *  pre-Tier-C state to transition out of). That route returns `501
- *  NOT_IMPLEMENTED` for `escalate_to_tier_c` on an ESCALATE item rather
- *  than fake a transition or write to the graph directly. */
-export type DecisionAction = "approve" | "reject" | "escalate_to_tier_c";
-
-export interface SubmitDecisionRequest {
-  decision: DecisionAction;
-  rationale: string | null; // required (non-empty, trimmed) whenever the gate requires it (Tier C / ESCALATE reject)
-}
-
-export interface SubmitDecisionResponse {
-  obligationStatus: ObligationStatus;
-  humanReview: HumanReview; // the fact just written — for MY OWN decision only, never the peer's
-  reviewGate: ReviewGateView; // updated view, same redaction rules as GET detail apply
-}
 
 // ---------------------------------------------------------------------------
 // Re-exports for convenience — callers of this module should not need a

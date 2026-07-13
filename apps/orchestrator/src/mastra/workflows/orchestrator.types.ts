@@ -111,6 +111,19 @@ export interface SuspendedRunIndexEntry {
   obligation_id: string;
   runId: string;
   stepId: "awaitHumanReview" | "awaitSecondHumanReview";
+  /** Tier at suspend time. ESCALATE has no distinct wire tier value and is
+   *  substituted to "C" by callers at the `.record()` call site — the
+   *  exact same convention already documented in `resumeOrchestratorRun`'s
+   *  comment about `event.review.tier` ("ESCALATE... is substituted to
+   *  'C' by callers... shares the exact same claim/suspend mechanics as
+   *  Tier C"). Tier A never reaches an await* suspend step at all, so "A"
+   *  is intentionally not a member of this union. */
+  tier: "B" | "C";
+  /** ISO timestamp this entry was suspended at (`rt.referenceNow()` at the
+   *  awaitHumanReviewStep/awaitSecondHumanReviewStep suspend call site) —
+   *  the SLA clock start consumed by Spec 11 §5.3's due-soon/breached
+   *  feed (orchestrator.sla-feed.ts). */
+  suspendedAt: string;
 }
 
 export interface SuspendedRunIndexPort {
@@ -128,6 +141,15 @@ export interface SuspendedRunIndexPort {
    *  `.claim()`, which is additive here and must not change its existing
    *  behavior). */
   getClaimSlots(obligation_id: string): Promise<{ maker: string | null; checker: string | null } | null>;
+  /** All currently-suspended entries (not yet cleared), for the SLA feed
+   *  (Spec 11 §5.3). Read-only, never mutates. */
+  listActive(): Promise<Array<SuspendedRunIndexEntry & { runId: string }>>;
+  /** Idempotent due-soon-reminder dedup per (obligation_id, reviewerId),
+   *  so the feed endpoint only ever returns a given due-soon transition
+   *  once (Spec 11 §5.3: "this endpoint only ever returns each item once
+   *  per state transition"). */
+  hasSentDueSoonReminder(obligation_id: string, reviewerId: string): Promise<boolean>;
+  markDueSoonReminderSent(obligation_id: string, reviewerId: string): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------

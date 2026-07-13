@@ -1,0 +1,25 @@
+{
+  "name": "@sentinel-act/review-contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint . --max-warnings 0",
+    "test": "vitest run test"
+  },
+  "dependencies": {
+    "@sentinel-act/graph-schema": "workspace:*"
+  },
+  "devDependencies": {
+    "@sentinel-act/eslint-config": "workspace:*",
+    "@sentinel-act/typescript-config": "workspace:*",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.9"
+  }
+}

@@ -462,7 +462,24 @@ export const awaitHumanReviewStep = createStep({
     const state = inputData as ObligationPipelineState;
     if (!resumeData) {
       // FR-18/FR-19: record the suspended run then suspend at "maker".
-      await rt.index.record({ obligation_id: state.obligation_id, runId: state.runId, stepId: "awaitHumanReview" });
+      // Single `suspendedAt` read so the index entry and the suspend
+      // state carry an identical timestamp (both are "when this branch
+      // suspended," not two independent clock reads).
+      const suspendedAt = rt.referenceNow();
+      // Tier A never reaches this step (only Tier B/C/ESCALATE branches
+      // suspend for human review — see AC1 in
+      // orchestrator.workflow.integration.test.ts, which never calls
+      // index.record for a Tier A branch), so the cast below is safe.
+      // ESCALATE has no distinct wire tier value and is substituted to
+      // "C" here — same convention as resumeOrchestratorRun's
+      // event.review.tier handling (see that function's comment).
+      await rt.index.record({
+        obligation_id: state.obligation_id,
+        runId: state.runId,
+        stepId: "awaitHumanReview",
+        tier: state.tierDecision.tier === "ESCALATE" ? "C" : (state.tierDecision.tier as "B" | "C"),
+        suspendedAt
+      });
       await suspend({
         obligation_id: state.obligation_id,
         task_id: state.task_id,
@@ -470,7 +487,7 @@ export const awaitHumanReviewStep = createStep({
         expectedSlot: "maker",
         makerReviewId: null,
         makerReviewerId: null,
-        suspendedAt: rt.referenceNow()
+        suspendedAt
       });
       return state;
     }
@@ -490,8 +507,18 @@ export const awaitSecondHumanReviewStep = createStep({
     const rt = getOrchestratorRuntime();
     const state = inputData as ObligationPipelineState;
     if (!resumeData) {
-      // FR-24: re-suspend at the checker slot.
-      await rt.index.record({ obligation_id: state.obligation_id, runId: state.runId, stepId: "awaitSecondHumanReview" });
+      // FR-24: re-suspend at the checker slot. Same single-read/ESCALATE
+      // substitution/Tier-A-unreachable reasoning as awaitHumanReviewStep
+      // above (this step is only ever reached via requiresSecondReview,
+      // i.e. Tier C/ESCALATE).
+      const suspendedAt = rt.referenceNow();
+      await rt.index.record({
+        obligation_id: state.obligation_id,
+        runId: state.runId,
+        stepId: "awaitSecondHumanReview",
+        tier: state.tierDecision.tier === "ESCALATE" ? "C" : (state.tierDecision.tier as "B" | "C"),
+        suspendedAt
+      });
       await suspend({
         obligation_id: state.obligation_id,
         task_id: state.task_id,
@@ -499,7 +526,7 @@ export const awaitSecondHumanReviewStep = createStep({
         expectedSlot: "checker",
         makerReviewId: null,
         makerReviewerId: null,
-        suspendedAt: rt.referenceNow()
+        suspendedAt
       });
       return state;
     }
