@@ -13,6 +13,7 @@
   "dependencies": {
     "@sentinel-act/graph-schema": "workspace:*",
     "@sentinel-act/graph-db": "workspace:*",
+    "@sentinel-act/audit-ledger": "workspace:*",
     "@mastra/core": "^1.50.0",
     "jsdom": "^29.1.1",
     "zod": "^4.4.3"
