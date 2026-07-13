@@ -334,6 +334,12 @@ export class InMemorySuspendedRunIndex implements SuspendedRunIndexPort {
     this.claims.set(obligation_id, current);
     return slot ? { slot } : null;
   }
+
+  /** FR-24a addition: pure read, never mutates `this.claims`. Returns null
+   *  when `.claim()` has never been called for this obligation. */
+  async getClaimSlots(obligation_id: string): Promise<{ maker: string | null; checker: string | null } | null> {
+    return this.claims.get(obligation_id) ?? null;
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -121,6 +121,13 @@ export interface SuspendedRunIndexPort {
    *  reviewer to whichever of maker/checker is open. Returns the assigned
    *  slot, or null if neither slot is open (409). */
   claim(obligation_id: string, reviewerId: string): Promise<{ slot: ReviewSlot } | null>;
+  /** FR-24a addition (Spec 09 §5's `viewerSlot` derivation for the
+   *  review-gate endpoint): a pure, non-mutating read of the current claim
+   *  slots for an obligation. Returns null when no claim has ever been
+   *  recorded for this obligation (never mutates state — distinct from
+   *  `.claim()`, which is additive here and must not change its existing
+   *  behavior). */
+  getClaimSlots(obligation_id: string): Promise<{ maker: string | null; checker: string | null } | null>;
 }
 
 // ---------------------------------------------------------------------------

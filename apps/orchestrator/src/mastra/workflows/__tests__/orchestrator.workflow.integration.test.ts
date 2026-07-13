@@ -366,6 +366,11 @@ describe("Spec 08 acceptance criteria (in-memory stateful graph)", () => {
 
     const token = makeJwt("test-secret");
 
+    // FR-20/FR-31: the maker/checker slot must be genuinely claimed before
+    // resumeOrchestratorRun accepts that reviewer's decision — claim it
+    // first, same as the real POST .../claim flow the BFF drives.
+    await h.index.claim("obl-c", "maker-1");
+
     // Maker submits.
     const first = await resumeOrchestratorRun(submission(state, "maker-1", "approve", "C", "awaitHumanReview", "ev-c1"));
     expect(first.finalStatus).toBe("still_pending");
@@ -380,7 +385,8 @@ describe("Spec 08 acceptance criteria (in-memory stateful graph)", () => {
     expect(checkerViewBefore.reveal).toBeNull();
     expect(checkerViewBefore.status).toBe("awaiting_maker");
 
-    // Checker submits (distinct reviewer).
+    // Checker claims, then submits (distinct reviewer).
+    await h.index.claim("obl-c", "checker-2");
     await resumeOrchestratorRun(submission(state, "checker-2", "approve", "C", "awaitSecondHumanReview", "ev-c2"));
     expect(h.sg.obligations.get("obl-c")!.status).toBe("committed");
 
@@ -397,6 +403,12 @@ describe("Spec 08 acceptance criteria (in-memory stateful graph)", () => {
     const state = makeState("obl-c2", "C");
     const h = makeHarness([state]);
     await preReviewCommit(h, state);
+    // FR-20/FR-31: claim the maker slot first (the same reviewer cannot
+    // also claim checker — InMemorySuspendedRunIndex.claim already
+    // enforces that — so the checker submission below is rejected by the
+    // pre-existing ReviewerIndependenceError check, which runs BEFORE the
+    // new claimed-slot check and fires first for this same-reviewer case).
+    await h.index.claim("obl-c2", "same-rev");
     await resumeOrchestratorRun(submission(state, "same-rev", "approve", "C", "awaitHumanReview", "ev-1"));
     await expect(
       resumeOrchestratorRun(submission(state, "same-rev", "approve", "C", "awaitSecondHumanReview", "ev-2"))
@@ -410,8 +422,12 @@ describe("Spec 08 acceptance criteria (in-memory stateful graph)", () => {
     const h = makeHarness([state]);
     await preReviewCommit(h, state);
     expect(h.sg.obligations.get("obl-e")!.status).toBe("escalated");
-    // maker approve, checker reject -> disagreement -> escalated
+    // maker approve, checker reject -> disagreement -> escalated. FR-20/
+    // FR-31: ESCALATE shares Tier C's claim/suspend mechanics, so each
+    // reviewer must claim their slot first.
+    await h.index.claim("obl-e", "m");
     await resumeOrchestratorRun(submission(state, "m", "approve", "C", "awaitHumanReview", "ev-1"));
+    await h.index.claim("obl-e", "c");
     await resumeOrchestratorRun(submission(state, "c", "reject", "C", "awaitSecondHumanReview", "ev-2"));
     expect(h.sg.obligations.get("obl-e")!.status).toBe("escalated");
   });

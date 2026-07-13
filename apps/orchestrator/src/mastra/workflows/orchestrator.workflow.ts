@@ -53,7 +53,7 @@ import {
   verifyServiceJwt
 } from "./orchestrator.logic.js";
 import type { FinalOutcome, ReviewGateView } from "./orchestrator.logic.js";
-import { ResumeValidationError, ReviewerIndependenceError, ServiceAuthError } from "./orchestrator.errors.js";
+import { NotAssignedError, ResumeValidationError, ReviewerIndependenceError, ServiceAuthError } from "./orchestrator.errors.js";
 import {
   awaitHumanReviewSuspendStateSchema,
   clauseBranchContextSchema,
@@ -230,6 +230,29 @@ export async function resumeOrchestratorRun(
     if (makerReviewerId && makerReviewerId === event.review.reviewer_id) {
       throw new ReviewerIndependenceError(
         `reviewer ${event.review.reviewer_id} is the maker for obligation ${event.obligation_id} — cannot also be the checker.`
+      );
+    }
+  }
+
+  // FR-20/FR-31: cheap early rejection, BEFORE any recordHumanReview call,
+  // when the submitting reviewer does not actually hold the claimed
+  // maker/checker slot for a dual-review (Tier C / ESCALATE) step. Tier B
+  // has no maker/checker split and never calls SuspendedRunIndexPort.claim
+  // at all (the BFF's claim route 422s "NOT_TIER_C" for anything that
+  // isn't Tier C — claiming is a Tier-C-only concept), so this check does
+  // not apply there. `event.review.tier` is the wire signal: "B" for Tier
+  // B, "C" for BOTH real Tier C and ESCALATE (which has no distinct wire
+  // tier value and is substituted to "C" by callers — see
+  // apps/web-console's decisions/route.ts humanReviewTierFor — but shares
+  // the exact same claim/suspend mechanics as Tier C from the moment it is
+  // routed, so gating on tier === "C" here is correct for both).
+  if (event.review.tier === "C") {
+    const slots = await deps.index.getClaimSlots(event.obligation_id);
+    const requiredSlot: "maker" | "checker" = event.stepId === "awaitHumanReview" ? "maker" : "checker";
+    const assignedReviewerId = slots ? slots[requiredSlot] : null;
+    if (assignedReviewerId !== event.review.reviewer_id) {
+      throw new NotAssignedError(
+        `reviewer ${event.review.reviewer_id} does not hold the claimed ${requiredSlot} slot for obligation ${event.obligation_id} — claim it first via POST .../claim.`
       );
     }
   }
