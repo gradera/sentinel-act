@@ -25,15 +25,15 @@ export type CreateInput<T> = Omit<T, "recorded_at">;
  * A single write intent handed to GraphWriter.commitProposal by the
  * Orchestrator. One CommitPlan = one atomic transaction.
  *
- * TODO(spec-06/08): docs/specs/README.md's "Known cross-spec gaps" flags
- * that Specs 06/08 assume this interface also carries
- * `obligationStatusTransitions` and `finalizeSupersessions` fields. This
- * spec (01) deliberately does NOT add them here — that coordination is
- * explicitly called out as unresolved, and inventing the shape
- * unilaterally would risk guessing wrong about what Specs 06/08 actually
- * need. Whoever implements those specs should extend this interface
- * (additively) once the exact shape is agreed, not silently work around
- * it with parallel types.
+ * Spec 06/08 additive extensions (`obligationStatusTransitions`,
+ * `finalizeSupersessions`) are defined below and wired through
+ * commit-plan-validator + GraphWriter.executePlan. Both are OPTIONAL and
+ * non-breaking: they add nothing to a plan that doesn't set them, and no
+ * existing field was renamed or removed. They implement Spec 08 §4.4's
+ * two-phase pre-review/post-review commit pattern (in-place status
+ * transition of an already-persisted Obligation, and deferred closing of
+ * a superseded Obligation's `valid_to` after the new node it supersedes
+ * was created in an earlier commit).
  */
 export interface CommitPlan {
   /** Idempotency key: the Orchestrator's workflow run id (or step id).
@@ -54,6 +54,16 @@ export interface CommitPlan {
   /** Zero or more supersession instructions to execute in the same
    *  transaction as the node/edge writes above. See FR-10. */
   supersessions?: SupersessionInstruction[];
+  /** Spec 08 §4.4: in-place `status` transitions of already-persisted
+   *  Obligation nodes (e.g. tier_b_review -> committed). Executed inside
+   *  the same managed transaction as everything else in the plan. */
+  obligationStatusTransitions?: ObligationStatusTransition[];
+  /** Spec 08 §4.4: closes an already-existing old Obligation's `valid_to`
+   *  and links (new)-[:SUPERSEDES]->(old), where the new Obligation was
+   *  created by an earlier CommitPlan. Reuses FR-10's `WHERE
+   *  old.valid_to IS NULL` guard, so a lost concurrent race throws
+   *  ConflictError identically to a `supersede()` conflict. */
+  finalizeSupersessions?: FinalizeSupersessionInstruction[];
 }
 
 export interface SupersessionInstruction {
@@ -61,6 +71,23 @@ export interface SupersessionInstruction {
   oldId: string; // circular_id or obligation_id being closed
   effectiveDate: string; // ISO date; becomes old.valid_to and (if
   // supplied) new.valid_from
+}
+
+/** Spec 08 §4.4: transition an already-persisted Obligation's `status`
+ *  field in place. Creates no node. */
+export interface ObligationStatusTransition {
+  obligation_id: string;
+  newStatus: Obligation["status"]; // any value in the ObligationStatus enum
+}
+
+/** Spec 08 §4.4: the new Obligation MUST already exist in the graph
+ *  (created by an earlier CommitPlan). This instruction only closes the
+ *  old node's `valid_to` and (idempotently) links
+ *  (new)-[:SUPERSEDES]->(old); it creates no node. */
+export interface FinalizeSupersessionInstruction {
+  oldObligationId: string;
+  newObligationId: string;
+  effectiveDate: string; // ISO date
 }
 
 export type NodeLabel =

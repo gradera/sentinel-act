@@ -135,6 +135,22 @@ export class GraphWriter {
       supersessionsApplied += 1;
     }
 
+    // Spec 08 §4.4: in-place Obligation.status transitions. Executed
+    // inside this same managed transaction (FR-12's atomicity extends to
+    // them). A missing obligation_id is a ConflictError, consistent with
+    // closeValidTo's "cannot act on a node that isn't there" semantics.
+    for (const transition of plan.obligationStatusTransitions ?? []) {
+      await this.applyStatusTransition(tx, transition.obligation_id, transition.newStatus);
+    }
+
+    // Spec 08 §4.4: deferred, guarded old-node close + SUPERSEDES link.
+    // Reuses FR-10's `WHERE old.valid_to IS NULL` guard so a lost
+    // concurrent race throws ConflictError identically to supersede().
+    for (const finalize of plan.finalizeSupersessions ?? []) {
+      await this.finalizeSupersession(tx, finalize.oldObligationId, finalize.newObligationId, finalize.effectiveDate);
+      supersessionsApplied += 1;
+    }
+
     for (const edge of plan.edges) {
       await this.createEdge(tx, edge);
       edgeCounts[edge.type] = (edgeCounts[edge.type] ?? 0) + 1;
@@ -209,6 +225,56 @@ export class GraphWriter {
         throw new ConflictError(`${label} ${instruction.oldId} does not exist — cannot supersede.`);
       }
       throw new ConflictError(`${label} ${instruction.oldId} is already superseded — cannot supersede again.`);
+    }
+  }
+
+  /** Spec 08 §4.4 (obligationStatusTransitions): sets `status` in place on
+   *  an already-persisted Obligation. Zero rows matched -> ConflictError
+   *  (the transition targets a node that does not exist). */
+  private async applyStatusTransition(tx: ManagedTransaction, obligationId: string, newStatus: string): Promise<void> {
+    const result = await tx.run(
+      `MATCH (o:Obligation {obligation_id: $obligationId})
+       SET o.status = $newStatus
+       RETURN o`,
+      { obligationId, newStatus }
+    );
+    if (result.records.length === 0) {
+      throw new ConflictError(`Obligation ${obligationId} does not exist — cannot transition status to "${newStatus}".`);
+    }
+  }
+
+  /** Spec 08 §4.4 (finalizeSupersessions): closes the old Obligation's
+   *  `valid_to` behind FR-10's guard and idempotently links the (already
+   *  existing) new Obligation to it via SUPERSEDES. The SUPERSEDES edge is
+   *  MERGEd (not CREATEd) because Spec 08 FR-16 may have already created a
+   *  plain lineage-intent edge at pre-review-commit time. Zero rows on the
+   *  guarded close -> ConflictError, distinguishing "does not exist" from
+   *  "already superseded" exactly like closeValidTo. */
+  private async finalizeSupersession(
+    tx: ManagedTransaction,
+    oldObligationId: string,
+    newObligationId: string,
+    effectiveDate: string
+  ): Promise<void> {
+    const guarded = await tx.run(
+      `MATCH (old:Obligation {obligation_id: $oldId})
+       SET old._concurrency_touch = datetime()
+       WITH old
+       WHERE old.valid_to IS NULL
+       MATCH (newObl:Obligation {obligation_id: $newId})
+       SET old.valid_to = date($effectiveDate)
+       MERGE (newObl)-[:SUPERSEDES]->(old)
+       RETURN old`,
+      { oldId: oldObligationId, newId: newObligationId, effectiveDate }
+    );
+    if (guarded.records.length === 0) {
+      const existing = await tx.run(`MATCH (old:Obligation {obligation_id: $oldId}) RETURN old.valid_to AS validTo`, {
+        oldId: oldObligationId
+      });
+      if (existing.records.length === 0) {
+        throw new ConflictError(`Obligation ${oldObligationId} does not exist — cannot finalize supersession.`);
+      }
+      throw new ConflictError(`Obligation ${oldObligationId} is already superseded — cannot finalize supersession again.`);
     }
   }
 

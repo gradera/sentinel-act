@@ -152,6 +152,17 @@ const supersessionInstructionSchema = z.object({
   effectiveDate: isoDate
 });
 
+// Spec 08 §4.4 additive extensions.
+const obligationStatusTransitionSchema = z.object({
+  obligation_id: nonEmptyString,
+  newStatus: obligationStatusSchema
+});
+const finalizeSupersessionInstructionSchema = z.object({
+  oldObligationId: nonEmptyString,
+  newObligationId: nonEmptyString,
+  effectiveDate: isoDate
+});
+
 // NOTE (FR-13): "ids referenced by edges exist somewhere in the plan or
 // are assumed to already exist in the graph" is deliberately NOT
 // enforced here as a hard structural check — the spec itself allows an
@@ -173,7 +184,9 @@ export const commitPlanSchema = z.object({
     humanReviews: z.array(humanReviewSchema).optional()
   }),
   edges: z.array(graphEdgeSchema),
-  supersessions: z.array(supersessionInstructionSchema).optional()
+  supersessions: z.array(supersessionInstructionSchema).optional(),
+  obligationStatusTransitions: z.array(obligationStatusTransitionSchema).optional(),
+  finalizeSupersessions: z.array(finalizeSupersessionInstructionSchema).optional()
 });
 
 /** Validates and returns a CommitPlan, or throws ValidationError with a

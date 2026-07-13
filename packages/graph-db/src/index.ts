@@ -24,6 +24,8 @@ export type {
   CreateInput,
   CommitPlan,
   SupersessionInstruction,
+  ObligationStatusTransition,
+  FinalizeSupersessionInstruction,
   CommitResult,
   NodeLabel,
   PointInTimeQuery,
