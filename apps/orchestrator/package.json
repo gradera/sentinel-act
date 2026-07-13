@@ -8,7 +8,7 @@
     "build": "mastra build",
     "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run src/mastra/agents/__tests__ src/mastra/scorers"
+    "test": "vitest run src/mastra/agents/__tests__ src/mastra/scorers src/mastra/workflows/__tests__"
   },
   "dependencies": {
     "@sentinel-act/graph-schema": "workspace:*",

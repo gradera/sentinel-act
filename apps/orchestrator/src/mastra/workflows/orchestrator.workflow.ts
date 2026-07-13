@@ -16,9 +16,8 @@
 // HumanReview node itself, anywhere.
 import { createStep, createWorkflow } from "@mastra/core/workflows";
 import { z } from "zod";
-import { getDriver } from "@sentinel-act/graph-db";
 import { GraphWriter } from "@sentinel-act/graph-db";
-import type { CommitPlan, CommitResult } from "@sentinel-act/graph-db";
+import type { CommitPlan } from "@sentinel-act/graph-db";
 import { ConflictError } from "@sentinel-act/graph-db";
 import type { HumanReview } from "@sentinel-act/graph-schema";
 
@@ -48,10 +47,7 @@ import {
   buildFinalizeCommitPlan,
   buildPreReviewCommitPlan,
   computeTierDecision,
-  deriveProposalId,
   deriveReviewGateView,
-  finalOutcomeFromReviewOutcome,
-  InMemorySuspendedRunIndex,
   normalizeHasContradiction,
   requiresSecondReview,
   verifyServiceJwt
@@ -59,7 +55,6 @@ import {
 import type { FinalOutcome, ReviewGateView } from "./orchestrator.logic.js";
 import { ResumeValidationError, ReviewerIndependenceError, ServiceAuthError } from "./orchestrator.errors.js";
 import {
-  auditEventSchema,
   awaitHumanReviewSuspendStateSchema,
   clauseBranchContextSchema,
   humanReviewSubmissionEventSchema,
