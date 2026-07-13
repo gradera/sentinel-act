@@ -523,7 +523,10 @@ interface NumberingMatch {
   remainder: string;
 }
 
-function matchNumberingToken(line: string): NumberingMatch | null {
+// Exported (additively) so Spec 06's Change and Delta marker-split (FR-7)
+// reuses this exact numbering-pattern family instead of forking a second
+// copy — see docs/specs/06-change-and-delta-agent.md §11 task 5.
+export function matchNumberingToken(line: string): NumberingMatch | null {
   // Most specific first: "46(a)" nested paragraph+sub-clause reference.
   const nested = /^(\d+\([a-zA-Z]\))\.?\s+(.*)$/.exec(line);
   if (nested) return { paraRef: nested[1], remainder: nested[2] };
