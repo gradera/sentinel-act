@@ -31,17 +31,33 @@
 // logged via `onCycleError`), never a crash — the same pre-existing
 // runtime-wiring gap this file's header already documents, not a new one.
 //
-// How to run this file (no `tsx`/`ts-node` is a resolvable dependency of
-// `apps/orchestrator` today — it exists only in the pnpm store as a
-// devDependency of `packages/audit-ledger`/`packages/graph-db`, not
-// hoisted here, and this task must not add a new dependency):
-//   1. Compile then run the plain JS output (works today, zero new deps):
-//        ./node_modules/.bin/tsc -p apps/orchestrator/tsconfig.json
-//        node apps/orchestrator/dist/server/start.js
-//   2. If `tsx` is later added as a devDependency of this package (matching
-//      the convention already used by packages/audit-ledger and
-//      packages/graph-db's own `migrate`/`seed` scripts):
-//        tsx src/server/start.ts
+// How to run this file — UPDATED (Spec 15 Task 9, found while writing the
+// Dockerfile): `tsx` is now a real (non-dev) dependency of this package
+// (`pnpm start` -> `tsx src/server/start.ts`), matching the convention
+// packages/audit-ledger's and packages/graph-db's own `migrate`/`seed`
+// scripts already used. This is not just a convenience — it is
+// *required*, not optional, because plain `tsc`-then-`node` (this
+// section's previous documented approach) does not actually work once
+// this file imports anything from a workspace package: every workspace
+// package this repo has (`@sentinel-act/graph-db`, `@sentinel-act/
+// audit-ledger`, `@sentinel-act/review-contracts`, `@sentinel-act/
+// ticketing-adapter`, ...) declares `"main"`/`"exports"` pointing straight
+// at its own raw `./src/index.ts` — never at its own `dist/` build output,
+// even though each one also has a working `"build": "tsc -p
+// tsconfig.build.json"` script. Plain Node cannot resolve/execute a `.ts`
+// entrypoint, so `node dist/server/start.js` compiled by plain `tsc`
+// fails at the first `import { getDriver } from "@sentinel-act/graph-db"`
+// (or any other workspace import) in a real (non-test) runtime — vitest
+// and `tsx` both transparently transpile TS on the fly, including for
+// resolved workspace dependencies, which is exactly why this gap was
+// invisible until someone tried to actually run a production build.
+// `tsx` is this spec's pragmatic fix (matches an existing convention,
+// zero changes needed to any other package); the more correct long-term
+// fix — every workspace package's `exports` conditionally pointing `dist/`
+// for `"import"`/`"require"` and `src/index.ts` only for `"types"` — is
+// flagged in Spec 15 §13 as a follow-up for whichever spec owns each
+// package, not solved here.
+//   Run: tsx src/server/start.ts   (or: pnpm --filter @sentinel-act/orchestrator start)
 //   Node's native `--experimental-strip-types` was tried and does NOT work
 //   here out of the box: this codebase's relative imports use explicit
 //   `.js` extensions (the correct ESM-with-TS-source convention) and
@@ -50,6 +66,20 @@
 import { createHttpServer } from "./http-server.js";
 import { getSlackAppDeps, SlackConfigError } from "../slack/app.js";
 import { createHttpSlaBreachFeedPort, startSlaReminderScheduler } from "../slack/sla-reminder-scheduler.js";
+import { validateOrchestratorEnv, OrchestratorEnvValidationError } from "./env.js";
+
+// Spec 15 §11 Task 11: fail fast, before opening a listening socket, on a
+// missing/renamed required env var — see env.ts's own header comment for
+// which vars are required vs. deliberately optional.
+try {
+  validateOrchestratorEnv();
+} catch (err) {
+  if (err instanceof OrchestratorEnvValidationError) {
+    console.error(err.message);
+    process.exit(1);
+  }
+  throw err;
+}
 
 const port = Number(process.env.PORT ?? 4111);
 

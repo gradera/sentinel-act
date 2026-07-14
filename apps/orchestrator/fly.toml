@@ -1,0 +1,33 @@
+# Spec 15 §11 Task 6 / FR-22. Illustrative skeleton (this spec's own
+# non-goal, §1, explicitly scopes Dockerfile/deploy config to a skeleton,
+# not a fully-tuned production config) — `app` names here are placeholders
+# until Task 14 provisions real Fly.io org/apps; `.github/workflows/
+# deploy.yml` passes `--app` explicitly per environment, overriding
+# whatever is committed here, so this file's `app` value is never actually
+# used by CI — only by a human running `flyctl deploy` locally by hand.
+app = "sentinel-act-orchestrator"
+primary_region = "bom" # Mumbai — closest to SEBI/India-based reviewers; confirm against team's actual latency needs before real provisioning (§13)
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 4111
+  force_https = true
+  auto_stop_machines = false   # FR-22: always-on, not Railway-style sleep-on-idle
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[http_service.checks]]
+  # FR-34: readiness probe backing Fly.io's own rolling-deploy health gate
+  # (§8's error-handling row relies on this to keep the previous machine
+  # serving traffic until a new one passes).
+  grace_period = "10s"
+  interval = "15s"
+  method = "GET"
+  path = "/readyz"
+  protocol = "http"
+  timeout = "5s"
+
+[env]
+  NODE_ENV = "production"

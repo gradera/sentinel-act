@@ -1,0 +1,92 @@
+# Spec 15 §11 Task 8 / FR-29. Brings up the three local-tier dependencies
+# both apps expect, with fixed, non-sensitive local credentials that match
+# apps/orchestrator/.env.example and apps/web-console/.env.example exactly
+# — copy either .env.example to .env with no edits and this stack is what
+# it connects to. Never used for staging/production (§6 Environment tiers
+# — those use AuraDB/Neon/R2, FR-24/FR-25/FR-26); local dev never touches
+# a shared or hosted database.
+#
+# NOTE (this spec's own sandbox limitation, documented rather than
+# silently assumed away): this file was authored and reviewed for syntax
+# in an environment with no `docker`/`podman` binary and no Docker socket
+# available, so `docker-compose up -d` itself could not be run here — the
+# same constraint packages/graph-db's and packages/audit-ledger's own
+# `*.integration.test.ts` files already flag for Testcontainers. Acceptance
+# Criterion 1 / the Definition of Done's "teammate runs this on a clean
+# machine" item is the actual verification step for this file; treat a
+# failure there as a real bug in this file, not a flake.
+name: sentinel-act
+
+services:
+  neo4j:
+    image: neo4j:5-community
+    ports:
+      - "7474:7474" # browser UI
+      - "7687:7687" # bolt (SENTINEL_NEO4J_URI / SENTINEL_NEO4J_ASSISTANT_URI)
+    environment:
+      # Matches apps/orchestrator/.env.example: SENTINEL_NEO4J_USER=neo4j,
+      # SENTINEL_NEO4J_PASSWORD=<this value>. NEO4J_AUTH format is
+      # "user/password"; NEO4J_PLUGINS enables the APOC procedures Spec
+      # 01's migrations/vector-index setup assumes are available locally.
+      NEO4J_AUTH: neo4j/sentinel-local-dev-password
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_dbms_security_procedures_unrestricted: apoc.*
+    volumes:
+      - neo4j-data:/data
+    healthcheck:
+      # Plain TCP-port-open check (§13 Open Question 4 / FR-12's own
+      # caveat) — cypher-shell is not on PATH in the plain community image
+      # without extra tooling, so this is the pragmatic default rather
+      # than a real `RETURN 1` probe.
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:7474 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  postgres:
+    image: postgres:16
+    ports:
+      - "5432:5432"
+    environment:
+      # Matches both .env.example files' SENTINEL_AUDIT_LEDGER_DATABASE_URL
+      # default: postgres://sentinel:sentinel@localhost:5432/sentinel_ledger
+      POSTGRES_USER: sentinel
+      POSTGRES_PASSWORD: sentinel
+      POSTGRES_DB: sentinel_ledger
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentinel -d sentinel_ledger"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000" # S3 API (EVIDENCE_STORAGE_ENDPOINT)
+      - "9001:9001" # web console
+    environment:
+      # Matches both .env.example files' EVIDENCE_STORAGE_ACCESS_KEY_ID /
+      # EVIDENCE_STORAGE_SECRET_ACCESS_KEY local defaults once a developer
+      # fills them in — MinIO's own root-credential env var names differ
+      # from the S3-style ones the apps read, hence both being spelled out
+      # in the header comment above rather than assumed identical.
+      MINIO_ROOT_USER: sentinel-minio-local
+      MINIO_ROOT_PASSWORD: sentinel-minio-local-password
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+volumes:
+  neo4j-data:
+  postgres-data:
+  minio-data:

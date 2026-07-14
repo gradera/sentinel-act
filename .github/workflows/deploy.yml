@@ -1,0 +1,205 @@
+name: Deploy
+on:
+  push:
+    branches: [main] # FR-30: staging deploys automatically on every merge to main
+  workflow_dispatch: # FR-31: production is a manual trigger/approval, never automatic
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Staging (FR-30). Runs on every push to main. FR-27: every step below
+  # checks its own required secret and SKIPS (not fails) if absent — this
+  # workflow is safe to merge before Vercel/Fly.io accounts exist (Task 14).
+  # ---------------------------------------------------------------------------
+  deploy-staging:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    concurrency:
+      # §8 error-handling row: two merges to main in quick succession must
+      # not race — the later one supersedes the earlier in-flight deploy.
+      group: deploy-staging
+      cancel-in-progress: true
+    environment: staging
+    outputs:
+      web_console_deployed: ${{ steps.web-console.outputs.deployed }}
+      orchestrator_deployed: ${{ steps.orchestrator.outputs.deployed }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy web-console to Vercel (staging)
+        id: web-console
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "skipping web-console deploy: VERCEL_TOKEN not set"
+            echo "deployed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          npx --yes vercel deploy --token="$VERCEL_TOKEN" --yes --cwd apps/web-console
+          echo "deployed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy orchestrator to Fly.io (staging)
+        id: orchestrator
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          if [ -z "$FLY_API_TOKEN" ]; then
+            echo "skipping orchestrator deploy: FLY_API_TOKEN not set"
+            echo "deployed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          curl -L https://fly.io/install.sh | sh
+          # SENTINEL_GIT_SHA (§4.1, Task 7): surfaced in HealthCheckResponse.version.
+          "$HOME/.fly/bin/flyctl" deploy --config apps/orchestrator/fly.toml \
+            --app sentinel-act-orchestrator-staging \
+            --build-arg SENTINEL_GIT_SHA="${{ github.sha }}"
+          echo "deployed=true" >> "$GITHUB_OUTPUT"
+
+      # FR-37: poll /readyz and /api/health for up to 60s. Only polls a
+      # target whose deploy step actually ran this time — skipping a
+      # not-yet-provisioned target must not fail the whole run (FR-27),
+      # but a target that DID just deploy and never becomes ready MUST
+      # fail (§8's "readyz reports down after a fresh deploy" row).
+      - name: Smoke test — orchestrator /readyz
+        if: steps.orchestrator.outputs.deployed == 'true'
+        env:
+          ORCHESTRATOR_URL: ${{ secrets.STAGING_ORCHESTRATOR_URL }}
+        run: |
+          if [ -z "$ORCHESTRATOR_URL" ]; then
+            echo "orchestrator deployed but STAGING_ORCHESTRATOR_URL is not set — cannot smoke test, failing closed"
+            exit 1
+          fi
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" "$ORCHESTRATOR_URL/readyz")
+            if [ "$code" = "200" ]; then echo "orchestrator ready"; exit 0; fi
+            sleep 2
+          done
+          echo "orchestrator did not become ready within 60s"
+          exit 1
+
+      - name: Smoke test — web console /api/health
+        if: steps.web-console.outputs.deployed == 'true'
+        env:
+          WEB_CONSOLE_URL: ${{ secrets.STAGING_WEB_CONSOLE_URL }}
+        run: |
+          if [ -z "$WEB_CONSOLE_URL" ]; then
+            echo "web-console deployed but STAGING_WEB_CONSOLE_URL is not set — cannot smoke test, failing closed"
+            exit 1
+          fi
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" "$WEB_CONSOLE_URL/api/health")
+            if [ "$code" = "200" ]; then echo "web-console ready"; exit 0; fi
+            sleep 2
+          done
+          echo "web-console did not become ready within 60s"
+          exit 1
+
+  # ---------------------------------------------------------------------------
+  # Production (FR-31). Manual trigger only (workflow_dispatch) — apply
+  # required-reviewers protection on the "production" GitHub Environment
+  # (repo Settings -> Environments) for the manual-approval gate; this
+  # workflow file cannot itself enforce that, same posture as FR-20's
+  # branch-protection recommendation (a repo-settings action, §11 Task 13).
+  # ---------------------------------------------------------------------------
+  deploy-production:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    concurrency:
+      # Deliberately NOT cancel-in-progress — a second manual production
+      # deploy should queue behind the first, never abort a live rollout.
+      group: deploy-production
+      cancel-in-progress: false
+    environment: production
+    outputs:
+      web_console_deployed: ${{ steps.web-console.outputs.deployed }}
+      orchestrator_deployed: ${{ steps.orchestrator.outputs.deployed }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy web-console to Vercel (production)
+        id: web-console
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "skipping web-console deploy: VERCEL_TOKEN not set"
+            echo "deployed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          npx --yes vercel deploy --token="$VERCEL_TOKEN" --prod --yes --cwd apps/web-console
+          echo "deployed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy orchestrator to Fly.io (production)
+        id: orchestrator
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          if [ -z "$FLY_API_TOKEN" ]; then
+            echo "skipping orchestrator deploy: FLY_API_TOKEN not set"
+            echo "deployed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          curl -L https://fly.io/install.sh | sh
+          "$HOME/.fly/bin/flyctl" deploy --config apps/orchestrator/fly.toml \
+            --app sentinel-act-orchestrator-production \
+            --build-arg SENTINEL_GIT_SHA="${{ github.sha }}"
+          echo "deployed=true" >> "$GITHUB_OUTPUT"
+
+      # FR-37 / §8: a deploy that "completes" but leaves the new instance
+      # unable to reach Neo4j must be visibly failed, not silently green.
+      # Fly.io's own rolling-deploy behavior (default) keeps the previous
+      # machine serving traffic until the new one passes its health check
+      # — this step only confirms that happened, it does not implement
+      # the rollback itself (§8's row: rely on platform behavior).
+      - name: Smoke test — orchestrator /readyz
+        if: steps.orchestrator.outputs.deployed == 'true'
+        env:
+          ORCHESTRATOR_URL: ${{ secrets.PRODUCTION_ORCHESTRATOR_URL }}
+        run: |
+          if [ -z "$ORCHESTRATOR_URL" ]; then
+            echo "orchestrator deployed but PRODUCTION_ORCHESTRATOR_URL is not set — cannot smoke test, failing closed"
+            exit 1
+          fi
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" "$ORCHESTRATOR_URL/readyz")
+            if [ "$code" = "200" ]; then echo "orchestrator ready"; exit 0; fi
+            sleep 2
+          done
+          echo "orchestrator did not become ready within 60s"
+          exit 1
+
+      - name: Smoke test — web console /api/health
+        if: steps.web-console.outputs.deployed == 'true'
+        env:
+          WEB_CONSOLE_URL: ${{ secrets.PRODUCTION_WEB_CONSOLE_URL }}
+        run: |
+          if [ -z "$WEB_CONSOLE_URL" ]; then
+            echo "web-console deployed but PRODUCTION_WEB_CONSOLE_URL is not set — cannot smoke test, failing closed"
+            exit 1
+          fi
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" "$WEB_CONSOLE_URL/api/health")
+            if [ "$code" = "200" ]; then echo "web-console ready"; exit 0; fi
+            sleep 2
+          done
+          echo "web-console did not become ready within 60s"
+          exit 1
+
+      # FR-39: apps are never Changesets-versioned; a git tag per
+      # successful production promotion is the human-readable release
+      # history instead. Only tags if at least one target actually
+      # deployed this run (a fully-skipped run — no secrets configured at
+      # all — has nothing to tag).
+      - name: Tag production release
+        if: steps.orchestrator.outputs.deployed == 'true' || steps.web-console.outputs.deployed == 'true'
+        run: |
+          tag="prod-$(date -u +%Y-%m-%d)-$(git rev-parse --short=8 HEAD)"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "$tag"
+          git push origin "$tag"
+          echo "Tagged production release: $tag"

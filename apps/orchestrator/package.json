@@ -8,7 +8,8 @@
     "build": "mastra build",
     "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run src/mastra/agents/__tests__ src/mastra/scorers src/mastra/workflows/__tests__ src/mastra/integrations/__tests__ src/slack src/server/__tests__"
+    "test": "vitest run src/mastra/agents/__tests__ src/mastra/scorers src/mastra/workflows/__tests__ src/mastra/integrations/__tests__ src/slack src/server/__tests__",
+    "start": "tsx src/server/start.ts"
   },
   "dependencies": {
     "@sentinel-act/graph-schema": "workspace:*",
@@ -18,6 +19,7 @@
     "@sentinel-act/ticketing-adapter": "workspace:*",
     "@mastra/core": "^1.50.0",
     "jsdom": "^29.1.1",
+    "tsx": "^4.19.2",
     "zod": "^4.4.3"
   },
   "devDependencies": {

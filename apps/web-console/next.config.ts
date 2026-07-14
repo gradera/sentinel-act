@@ -1,16 +1,25 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // NOTE: @sentinel-act/graph-db and @sentinel-act/assistant-core also
-  // ship raw, uncompiled src/*.ts (same "main"/"exports" convention as
-  // @sentinel-act/graph-schema below) and are NOT listed here — a
-  // pre-existing gap from before this task (packages/graph-db's audit
-  // routes already import it this way without being transpiled), not
-  // something introduced or fixed by Spec 12's route handler. `next build`
-  // has not actually been exercised against this app yet in this repo;
-  // whoever first runs it for real will hit this for both packages at
-  // once and should add both here together.
-  transpilePackages: ["@sentinel-act/ui", "@sentinel-act/graph-schema"]
+  // Spec 15 Task 11 fix: every one of this app's workspace dependencies
+  // ships raw, uncompiled src/*.ts ("main"/"exports" pointing at
+  // ./src/index.ts, never a dist/ build — see apps/orchestrator/src/server/
+  // start.ts's header comment and Spec 15 §13 Open Question 11 for the
+  // fuller writeup of this repo-wide gap). Next.js's own transpilePackages
+  // is the framework-native fix for exactly this (Webpack/Turbopack
+  // transpile these packages' TS on the fly instead of expecting
+  // pre-compiled JS) — previously only @sentinel-act/ui and
+  // @sentinel-act/graph-schema were listed here, which this task
+  // completes to cover every workspace dependency this app actually has
+  // (confirmed against package.json's own dependency list).
+  transpilePackages: [
+    "@sentinel-act/ui",
+    "@sentinel-act/graph-schema",
+    "@sentinel-act/graph-db",
+    "@sentinel-act/report-generation",
+    "@sentinel-act/review-contracts",
+    "@sentinel-act/assistant-core"
+  ]
 };
 
 export default nextConfig;

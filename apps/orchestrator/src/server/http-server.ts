@@ -11,6 +11,8 @@
 //   POST /api/orchestrator/obligations/:obligationId/resume
 //   GET  /api/orchestrator/review-sla/due-soon-and-breached
 //   GET  /healthz
+//   GET  /readyz (Spec 15 §5.3/FR-34, added alongside /healthz — actively
+//        checks Neo4j/Postgres, see health.ts)
 //
 // Server-to-server only (Spec 09's BFF, Spec 11's Slack backend) — never
 // called from a browser. Auth is `SENTINEL_SERVICE_JWT_SECRET` via
@@ -69,6 +71,7 @@ import {
 import { toWireReviewGateView } from "../mastra/workflows/orchestrator.review-gate-view.js";
 import type { HumanReviewSubmissionEvent } from "../mastra/workflows/orchestrator.types.js";
 import { dispatchSlackRequest, getSlackAppDeps, SlackConfigError } from "../slack/app.js";
+import { buildHealthzResponse, buildReadyzResult } from "./health.js";
 
 // ---------------------------------------------------------------------------
 // Small local error type for hand-written request validation (400s). Kept
@@ -433,12 +436,18 @@ async function handleSlaBreachFeed(req: IncomingMessage, res: ServerResponse): P
 }
 
 // ---------------------------------------------------------------------------
-// Route: GET /healthz (Spec 15 §5.3 — web-console pings ORCHESTRATOR_BASE_URL
-// + "/healthz", not "/readyz").
+// Route: GET /healthz (Spec 15 §5.3/FR-33 — liveness only, never touches a
+// dependency; web-console's /api/health pings this, not /readyz).
+// Route: GET /readyz (Spec 15 §5.3/FR-34 — actively pings Neo4j/Postgres).
 // ---------------------------------------------------------------------------
 
 function handleHealthz(res: ServerResponse): void {
-  sendJson(res, 200, { status: "ok", serviceAuthConfigured: Boolean(process.env.SENTINEL_SERVICE_JWT_SECRET) });
+  sendJson(res, 200, buildHealthzResponse());
+}
+
+async function handleReadyz(res: ServerResponse): Promise<void> {
+  const { httpStatus, body } = await buildReadyzResult();
+  sendJson(res, httpStatus, body);
 }
 
 // ---------------------------------------------------------------------------
@@ -459,6 +468,11 @@ async function dispatch(req: IncomingMessage, res: ServerResponse): Promise<void
 
   if (method === "GET" && pathname === "/healthz") {
     handleHealthz(res);
+    return;
+  }
+
+  if (method === "GET" && pathname === "/readyz") {
+    await handleReadyz(res);
     return;
   }
 

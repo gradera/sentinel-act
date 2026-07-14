@@ -4,10 +4,15 @@ on:
   push:
     branches: [main]
 jobs:
+  # Existing job — unchanged in its original steps (Spec 15 FR-9). Only the
+  # non-blocking pnpm audit step (FR-17) and changeset status step (FR-40)
+  # were appended.
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # changeset status (below) needs the full history to diff against origin/main
       - uses: pnpm/action-setup@v4
         with:
           version: 9
@@ -19,3 +24,68 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm build
+      # FR-17: SHOULD, not MUST — non-blocking so a transitive-dependency
+      # CVE nobody has triaged yet never blocks a merge. Flagged in Spec 15
+      # §13 as the item to make blocking once the team has bandwidth.
+      - name: Dependency audit (non-blocking)
+        run: pnpm audit --audit-level=high
+        continue-on-error: true
+      # FR-40: SHOULD, not MUST — comments on the PR if a changeset is
+      # missing for packages/ui, graph-schema, graph-db, or audit-ledger,
+      # but never fails the job. `changeset status` exits non-zero when a
+      # changeset is missing, hence continue-on-error here too.
+      - name: Changeset status (non-blocking)
+        run: pnpm exec changeset status --since=origin/main
+        continue-on-error: true
+
+  # New job (Spec 15 FR-10–FR-18). Runs in parallel with `build`, not
+  # sequentially after it. §4.1b: the originally-specified design (static
+  # GitHub Actions service containers for Neo4j/Postgres + explicit
+  # seed/migrate steps) does not match what Specs 01/07 actually built —
+  # packages/graph-db and packages/audit-ledger's own `test` scripts are
+  # pure unit/mocked-driver suites with no external dependency at all, so
+  # this job needs nothing beyond checkout + install.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo run test
+
+  # New job (Spec 15 FR-10–FR-15, corrected per §4.1b). packages/graph-db's
+  # and packages/audit-ledger's test:integration scripts are
+  # Testcontainers-backed (@testcontainers/neo4j, @testcontainers/postgresql)
+  # — each integration test file starts, migrates/seeds, and tears down its
+  # own ephemeral neo4j:5-community / postgres:16 container, so this job
+  # needs a working Docker daemon (GitHub's ubuntu-latest runners ship one
+  # by default) rather than a `services:` block. Kept as a separate job
+  # from `test` (not folded into it) since Testcontainers-backed suites are
+  # materially slower — this is the "faster test:unit / slower
+  # test:integration" split FR-19/NFR-1 anticipates, just under the names
+  # the actual packages already use.
+  test-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo run test:integration
+      # Spec 15 §11 Task 12's own cross-app integration test — not part of
+      # any turbo-registered package (repo-root ci/ directory), run
+      # directly via vitest. Same Docker-daemon requirement as the step
+      # above, nothing additional needed.
+      - name: Health-endpoints cross-app integration test
+        run: pnpm test:ci-health-endpoints

@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run lib/console app/api/console app/api/audit app/api/assistant scripts"
+    "test": "vitest run lib/console app/api/console app/api/audit app/api/assistant app/api/health scripts"
   },
   "dependencies": {
     "@sentinel-act/ui": "workspace:*",
