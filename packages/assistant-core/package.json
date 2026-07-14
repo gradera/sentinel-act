@@ -1,5 +1,5 @@
 {
-  "name": "@sentinel-act/graph-db",
+  "name": "@sentinel-act/assistant-core",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -12,15 +12,15 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint . --max-warnings 0",
-    "test": "vitest run test/repositories test/commit test/vector-search.test.ts test/migrations test/queries test/readonly-driver.test.ts",
-    "test:integration": "vitest run test/integration",
-    "migrate": "tsx --env-file=.env src/migrations/cli.ts",
-    "seed": "tsx --env-file=.env seed/seed.ts"
+    "test": "vitest run test/*.test.ts",
+    "test:integration": "vitest run test/integration"
   },
   "dependencies": {
+    "@sentinel-act/graph-db": "workspace:*",
     "@sentinel-act/graph-schema": "workspace:*",
+    "@mastra/core": "^1.50.0",
     "neo4j-driver": "^5.27.0",
-    "zod": "^3.24.1"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@sentinel-act/eslint-config": "workspace:*",
@@ -28,7 +28,6 @@
     "@testcontainers/neo4j": "^10.16.0",
     "testcontainers": "^10.16.0",
     "@types/node": "^22.10.0",
-    "tsx": "^4.19.2",
     "typescript": "^5.7.0",
     "vitest": "^2.1.9"
   }

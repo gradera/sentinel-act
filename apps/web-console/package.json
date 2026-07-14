@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run lib/console app/api/console app/api/audit scripts"
+    "test": "vitest run lib/console app/api/console app/api/audit app/api/assistant scripts"
   },
   "dependencies": {
     "@sentinel-act/ui": "workspace:*",
@@ -16,6 +16,8 @@
     "@sentinel-act/graph-db": "workspace:*",
     "@sentinel-act/report-generation": "workspace:*",
     "@sentinel-act/review-contracts": "workspace:*",
+    "@sentinel-act/assistant-core": "workspace:*",
+    "@mastra/core": "^1.50.0",
     "next": "^15.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

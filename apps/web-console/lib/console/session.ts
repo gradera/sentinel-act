@@ -136,3 +136,17 @@ export const OPERATOR_MODE_ROLES: readonly ReviewerRole[] = ["compliance_officer
  *  reviewer checking historical context on their own decisions), widen
  *  this constant — do not special-case it deeper in each route handler. */
 export const OBSERVER_MODE_ROLES: readonly ReviewerRole[] = ["compliance_head"];
+
+/** Spec 12 NFR-9: role guard for `POST /api/assistant/query`. The kickoff
+ *  doc's own illustrative role list (`["operator","observer","admin"]`)
+ *  doesn't exist in this codebase — `ReviewerRole` is the real four-value
+ *  union (`compliance_officer`, `senior_compliance_officer`,
+ *  `backup_reviewer`, `compliance_head`). The Conversational Assistant is a
+ *  read-only aid over the same Regulatory Knowledge Graph both Operator
+ *  mode (Spec 09) and Observer mode (Spec 10) already read from — nothing
+ *  in Spec 12's text scopes it to one persona over the other, and
+ *  read-only enforcement is already guaranteed by three independent layers
+ *  below the route (FR-21/FR-22/FR-23), not by narrowing who may ask a
+ *  question. So this is every real role, i.e. `OPERATOR_MODE_ROLES` union
+ *  `OBSERVER_MODE_ROLES` — not a new, independently-drifting list. */
+export const ASSISTANT_ROLES: readonly ReviewerRole[] = [...OPERATOR_MODE_ROLES, ...OBSERVER_MODE_ROLES];

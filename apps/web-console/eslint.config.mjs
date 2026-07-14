@@ -18,6 +18,15 @@ import sharedConfig from "@sentinel-act/eslint-config";
 // `no-restricted-imports`'s `paths`/`importNames` option rather than by
 // code review discipline alone.
 //
+// Spec 12 FR-22 extends this SAME rule (not a second, separately
+// maintained one) to also cover `app/api/assistant/**` — the Conversational
+// Assistant's route handler has the identical constraint: it may read via
+// AssistantQueryService/AuditQueryService, but must never import a write
+// path. See packages/assistant-core/eslint.config.js for the equivalent
+// restriction covering that package itself (a separate lint run, so it
+// needs its own rule instance — see that file's comment for why that
+// isn't "a duplicate" in the sense FR-22 warns against).
+//
 // Scope of the restricted names:
 // - `GraphWriter` — the Orchestrator's only write entry point (§5.7).
 //   `commitProposal` itself is a *method* on this class, not a standalone
@@ -50,7 +59,7 @@ import sharedConfig from "@sentinel-act/eslint-config";
 // routes need this import to exist at all.
 const graphDbNoWriteImports = {
   name: "sentinel-act/observer-audit-no-graph-write",
-  files: ["app/(observer)/audit/**/*.{ts,tsx}", "app/api/audit/**/*.{ts,tsx}"],
+  files: ["app/(observer)/audit/**/*.{ts,tsx}", "app/api/audit/**/*.{ts,tsx}", "app/api/assistant/**/*.{ts,tsx}"],
   rules: {
     "no-restricted-imports": [
       "error",
@@ -72,7 +81,7 @@ const graphDbNoWriteImports = {
               "HumanReviewRepository"
             ],
             message:
-              "Spec 10 FR-21: app/(observer)/audit/** and app/api/audit/** must never write to the Regulatory Knowledge Graph. Use AuditQueryService or ExportJobStore (read-only / :ExportJob-only) instead."
+              "Spec 10 FR-21 / Spec 12 FR-22: app/(observer)/audit/**, app/api/audit/**, and app/api/assistant/** must never write to the Regulatory Knowledge Graph. Use AuditQueryService, ExportJobStore, or AssistantQueryService (all read-only) instead."
           }
         ]
       }

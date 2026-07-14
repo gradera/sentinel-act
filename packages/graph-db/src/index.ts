@@ -8,6 +8,17 @@
 export { createDriver, getDriver, closeDriver, verifyConnectivity, getSingletonDatabase } from "./driver.js";
 export type { GraphDbConfig } from "./driver.js";
 
+// Second, distinct read-only driver singleton for the Conversational
+// Assistant (Spec 12 §4.5, FR-23, NFR-3) — never touches getDriver()'s
+// singleton above.
+export {
+  getAssistantReadOnlyDriver,
+  closeAssistantReadOnlyDriver,
+  getAssistantSingletonDatabase,
+  ALLOW_SHARED_CREDENTIAL_FALLBACK_ENV,
+  ASSISTANT_READONLY_DB_ROLE_NOT_CONFIGURED
+} from "./readonly-driver.js";
+
 // Error taxonomy (§8).
 export {
   GraphDbError,
@@ -88,3 +99,26 @@ export type {
   ComplianceRegisterExportJob,
   ComplianceRegisterRow
 } from "./queries/audit-query.types.js";
+
+// Conversational Assistant read path (Spec 12 §4.2, §5.2). Structured
+// (templated Cypher) retrieval only — packages/assistant-core imports
+// AssistantQueryService and AssistantGraphContext from here rather than
+// reaching into packages/graph-db/src/queries/*.ts directly, same
+// boundary convention as the Observer-mode exports above.
+export {
+  ASSISTANT_QUERY_TEMPLATES,
+  findAssistantQueryTemplate,
+  obligationsByCategoryAndDateRangeTemplate,
+  obligationByIdWithLineageTemplate,
+  circularByIdOrTitleTemplate,
+  obligationsByStatusTemplate,
+  reviewsByCategoryAndDateRangeTemplate
+} from "./queries/assistant-query-templates.js";
+export type { AssistantQueryTemplate } from "./queries/assistant-query-templates.js";
+export { AssistantQueryService } from "./queries/assistant-query.js";
+export type { AssistantGraphContext } from "./queries/assistant-query.types.js";
+export {
+  emptyAssistantGraphContext,
+  isEmptyAssistantGraphContext,
+  mergeAssistantGraphContexts
+} from "./queries/assistant-query.types.js";
