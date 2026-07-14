@@ -7,6 +7,11 @@
 # ---------------------------------------------------------------------------
 node_modules/
 .pnpm-store/
+# Scratch npm install used only to work around this sandbox's broken/
+# incomplete pnpm store when verifying Spec 13 (packages/ticketing-adapter
+# needs `pg`, which pnpm could not fully install here) — never a real
+# dependency source, safe to delete and regenerate at any time.
+.scratch-install/
 
 # ---------------------------------------------------------------------------
 # Env files — never commit real secrets. Ignore every .env* variant, then

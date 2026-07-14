@@ -14,6 +14,7 @@
 // `recordHumanReview`, called by `resumeOrchestratorRun` (FR-21a) BEFORE
 // `run.resume(...)`, at reviewer-submit time. This workflow never writes a
 // HumanReview node itself, anywhere.
+import { randomUUID } from "node:crypto";
 import { createStep, createWorkflow } from "@mastra/core/workflows";
 import { z } from "zod";
 import { GraphWriter } from "@sentinel-act/graph-db";
@@ -147,6 +148,33 @@ export interface WorkflowEnginePort {
 }
 
 // ---------------------------------------------------------------------------
+// Spec 13 (GRC/Ticketing Integration) forward-declared hook, additive to
+// this file per that spec's Task 8 (coordinated here, not guessed at from
+// the other side). Deliberately a minimal, one-method port — NOT the full
+// TicketingContext/TicketingAdapter surface from
+// @sentinel-act/ticketing-adapter — so this file (someone else's,
+// already-shipped Spec 08 workflow) does not need to import that
+// package's full construction concerns just to know how to fire the
+// trigger. apps/orchestrator/src/mastra/integrations/grc-ticketing.ts
+// defines a structurally-identical interface and a
+// createTicketingTriggerPort(ctx) factory satisfying it — the same
+// locally-scoped-port-per-file convention already used for GraphQueryPort
+// across this repo (see risk-score.scorer.ts, monitoring-and-audit.agent.ts,
+// mapping-risk-scoring.graph.ts).
+// ---------------------------------------------------------------------------
+
+export interface TicketingTriggerPort {
+  handle(event: {
+    event_id: string;
+    obligation_id: string;
+    task_id: string;
+    final_status: "tier_a_committed" | "committed";
+    tier: "A" | "B" | "C" | "ESCALATE";
+    committed_at: string;
+  }): Promise<{ enqueued: boolean }>;
+}
+
+// ---------------------------------------------------------------------------
 // Runtime wiring. Steps and entry points read the active runtime here so
 // they don't need Mastra's DI. Configure once at app startup via
 // configureOrchestratorRuntime(); defaults are lazily built from env.
@@ -159,6 +187,13 @@ export interface OrchestratorRuntime {
   auditLog: AuditLogFn;
   engine: WorkflowEnginePort;
   referenceNow: () => string;
+  /** Spec 13 Task 8: OPTIONAL — every existing OrchestratorRuntime object
+   *  literal across this repo's test suites stays valid with no changes
+   *  (an absent field is simply a no-op, see fireTicketingTrigger below).
+   *  Fires once, immediately after a successful Tier A (FR-27) or
+   *  Tier B/C-approved (FR-28) commit — never for reject/disagreement
+   *  (FR-30/FR-31). */
+  ticketing?: TicketingTriggerPort;
 }
 
 let activeRuntime: OrchestratorRuntime | null = null;
@@ -576,7 +611,12 @@ export async function finalizeCommit(state: ObligationPipelineState, outcome: Fi
   const plan = buildFinalizeCommitPlan({ state, outcome, effectiveDate });
   if (!plan) {
     // Non-overwriting Tier A: pre-review commit was already final.
+    // buildFinalizeCommitPlan only ever returns null for outcome ===
+    // "tier_a" (orchestrator.logic.ts's switch — the "approve"/"reject"/
+    // "disagreement" cases always return a plan), so firing here is
+    // unconditionally safe for FR-27.
     await emitFinalAudit(state, outcome, rt);
+    await fireTicketingTrigger(state, outcome, rt);
     return true;
   }
 
@@ -586,8 +626,51 @@ export async function finalizeCommit(state: ObligationPipelineState, outcome: Fi
   if (ok) {
     await emitFinalAudit(state, outcome, rt);
     await rt.index.clear(state.obligation_id);
+    await fireTicketingTrigger(state, outcome, rt);
   }
   return ok;
+}
+
+// ---------------------------------------------------------------------------
+// Spec 13 §5.2's call site, additive. Fires ONLY for a successful Tier A
+// (FR-27) or Tier B/C-approved (FR-28) commit — never reject (FR-30) or
+// disagreement/escalate (FR-31). Wrapped in try/catch per FR-2: this MUST
+// NOT fail, retry, or roll back finalizeCommit — the graph commit has
+// already durably succeeded by the time this runs. `rt.ticketing` is
+// optional (see OrchestratorRuntime's doc comment above); every existing
+// test/runtime construction across this repo that does not set it is
+// unaffected — a no-op, not an error.
+// ---------------------------------------------------------------------------
+
+async function fireTicketingTrigger(state: ObligationPipelineState, outcome: FinalOutcome, rt: OrchestratorRuntime): Promise<void> {
+  if (outcome !== "tier_a" && outcome !== "approve") {
+    return;
+  }
+  if (!rt.ticketing) {
+    return;
+  }
+  try {
+    await rt.ticketing.handle({
+      event_id: randomUUID(),
+      obligation_id: state.obligation_id,
+      task_id: state.task_id,
+      final_status: outcome === "tier_a" ? "tier_a_committed" : "committed",
+      tier: state.tierDecision.tier,
+      committed_at: rt.referenceNow()
+    });
+  } catch (err) {
+    console.error(
+      JSON.stringify({
+        ts: new Date().toISOString(),
+        level: "error",
+        operation: "ticketing_trigger_failed",
+        obligation_id: state.obligation_id,
+        task_id: state.task_id,
+        message: err instanceof Error ? err.message : String(err)
+      })
+    );
+    // MUST NOT rethrow — FR-2.
+  }
 }
 
 async function emitFinalAudit(state: ObligationPipelineState, outcome: FinalOutcome, rt: OrchestratorRuntime): Promise<void> {

@@ -5,6 +5,7 @@
 // pattern. Also implements Spec 07 §9's Acceptance Criteria 1-6 as
 // literal test cases.
 import { describe, expect, it } from "vitest";
+import { DEADLINE_FIXTURE } from "@sentinel-act/ticketing-adapter";
 import type { EvidenceArtifact, HumanReview, ProcessTask } from "@sentinel-act/graph-schema";
 import type { CommitPlan, CommitResult } from "@sentinel-act/graph-db";
 import type { AuditLedgerPort, LedgerEntry, LedgerAppendInput, LedgerQuery, ChainVerificationResult } from "@sentinel-act/audit-ledger";
@@ -225,6 +226,22 @@ describe("computeTaskDeadline", () => {
   it("handles a fractional-hour sla_hours value producing a non-round-hour deadline", () => {
     const task = makeProcessTask({ valid_from: "2026-07-01T00:00:00.000Z", sla_hours: 1.5 });
     expect(computeTaskDeadline(task)).toBe("2026-07-01T01:30:00.000Z");
+  });
+
+  // Spec 13 (GRC/Ticketing Integration) FR-10: computeTicketDueDate MUST
+  // NOT compute a different value for "the deadline" than this unit's own
+  // computeTaskDeadline. packages/ticketing-adapter cannot import this
+  // file's code (wrong dependency direction — packages cannot depend on
+  // apps), so both sides instead assert against this same shared,
+  // checked-in fixture table (exported from
+  // @sentinel-act/ticketing-adapter, since apps/orchestrator already
+  // depends on that package for Spec 13's own wiring) — a table-driven
+  // drift guard, not a real code-sharing dependency.
+  describe("drift guard against @sentinel-act/ticketing-adapter's computeTicketDueDate (Spec 13 FR-10)", () => {
+    it.each(DEADLINE_FIXTURE)("$name: valid_from=$valid_from sla_hours=$sla_hours -> $expected", ({ valid_from, sla_hours, expected }) => {
+      const task = makeProcessTask({ valid_from, sla_hours });
+      expect(computeTaskDeadline(task)).toBe(expected);
+    });
   });
 });
 

@@ -1,0 +1,14 @@
+{
+  "Compliance Officer": {
+    "externalAssigneeRef": "queue:compliance-ops",
+    "displayLabel": "Compliance Officer"
+  },
+  "Senior Compliance Officer": {
+    "externalAssigneeRef": "queue:compliance-ops-senior",
+    "displayLabel": "Senior Compliance Officer"
+  },
+  "Stockbroker Operations Team": {
+    "externalAssigneeRef": "queue:stockbroker-ops",
+    "displayLabel": "Stockbroker Operations Team"
+  }
+}

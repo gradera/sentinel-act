@@ -26,8 +26,8 @@ import {
   requiresSecondReview
 } from "../orchestrator.logic.js";
 import type { FinalOutcome } from "../orchestrator.logic.js";
-import { resumeOrchestratorRun } from "../orchestrator.workflow.js";
-import type { MonitoringAuditPort, ResumeDeps, WorkflowEnginePort } from "../orchestrator.workflow.js";
+import { configureOrchestratorRuntime, finalizeCommit, resumeOrchestratorRun } from "../orchestrator.workflow.js";
+import type { MonitoringAuditPort, OrchestratorRuntime, ResumeDeps, TicketingTriggerPort, WorkflowEnginePort } from "../orchestrator.workflow.js";
 import { NotAssignedError, ResumeValidationError, ReviewerIndependenceError } from "../orchestrator.errors.js";
 import type { ObligationPipelineState } from "../orchestrator.types.js";
 
@@ -601,5 +601,114 @@ describe("InMemorySuspendedRunIndex.claim (§8 open-item-0)", () => {
   it("does not let the same reviewer take both slots", async () => {
     expect(await index.claim("obl-1", "r1")).toEqual({ slot: "maker" });
     expect(await index.claim("obl-1", "r1")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 9. Spec 13 (GRC/Ticketing Integration) Task 8 — the additive
+// finalizeCommit hook. Definition of Done requires: "covered by at least
+// one test in Spec 08's own suite asserting a createTicket-throwing mock
+// never fails the workflow run." rt.ticketing.handle is the mock in
+// question here (the actual createTicket call happens one layer deeper,
+// inside packages/ticketing-adapter's own processOutboxOnce — this hook
+// only ever enqueues, per FR-2/FR-3 — but the same never-block invariant
+// applies at every layer, and this is the layer finalizeCommit itself
+// touches).
+// ---------------------------------------------------------------------------
+
+describe("Spec 13: ticketing trigger hook (FR-2 — must never block finalizeCommit)", () => {
+  function makeMinimalRuntime(overrides: Partial<OrchestratorRuntime> = {}): OrchestratorRuntime {
+    return {
+      graphWriter: {
+        commitProposal: vi.fn(async (plan: CommitPlan) => ({
+          proposalId: plan.proposalId,
+          committedAt: "2026-07-14T00:00:00.000Z",
+          nodeCounts: {},
+          edgeCounts: {},
+          supersessionsApplied: 0
+        }))
+      },
+      monitoring: {
+        recordHumanReview: vi.fn(async () => {
+          throw new Error("not used by finalizeCommit");
+        }),
+        getReviewsVisibleTo: vi.fn(async () => {
+          throw new Error("not used by finalizeCommit");
+        })
+      } as unknown as MonitoringAuditPort,
+      index: new InMemorySuspendedRunIndex(),
+      auditLog: vi.fn(async () => undefined),
+      engine: {
+        start: vi.fn(async () => {
+          throw new Error("not used by finalizeCommit");
+        }),
+        resume: vi.fn(async () => {
+          throw new Error("not used by finalizeCommit");
+        }),
+        currentSuspendedStep: vi.fn(async () => {
+          throw new Error("not used by finalizeCommit");
+        }),
+        getMakerReviewerId: vi.fn(async () => {
+          throw new Error("not used by finalizeCommit");
+        }),
+        getObligationStatus: vi.fn(async () => {
+          throw new Error("not used by finalizeCommit");
+        })
+      } as unknown as WorkflowEnginePort,
+      referenceNow: () => "2026-07-14T00:00:00.000Z",
+      ...overrides
+    };
+  }
+
+  it("a throwing ticketing.handle mock does not cause finalizeCommit to throw or change its return value (tier_a, non-overwrite fast path — plan === null)", async () => {
+    const state = makeState({ obligation_id: "obl-tk-1", task_id: "task-tk-1", tierDecision: { tier: "A", reasons: ["BASE_TIER_A"] } });
+    const throwingTicketing: TicketingTriggerPort = {
+      handle: vi.fn(async () => {
+        throw new Error("boom");
+      })
+    };
+    configureOrchestratorRuntime(makeMinimalRuntime({ ticketing: throwingTicketing }));
+
+    const result = await finalizeCommit(state, "tier_a");
+
+    expect(result).toBe(true);
+    expect(throwingTicketing.handle).toHaveBeenCalledTimes(1);
+  });
+
+  it("a throwing ticketing.handle mock does not cause finalizeCommit to throw for an approve outcome (the ok-branch call site)", async () => {
+    const state = makeState({ obligation_id: "obl-tk-2", task_id: "task-tk-2", tierDecision: { tier: "B", reasons: ["RISK_SCORE_TIER_B"] } });
+    const throwingTicketing: TicketingTriggerPort = {
+      handle: vi.fn(async () => {
+        throw new Error("boom");
+      })
+    };
+    configureOrchestratorRuntime(makeMinimalRuntime({ ticketing: throwingTicketing }));
+
+    const result = await finalizeCommit(state, "approve");
+
+    expect(result).toBe(true);
+    expect(throwingTicketing.handle).toHaveBeenCalledTimes(1);
+  });
+
+  it("never fires the ticketing hook for reject/disagreement outcomes (FR-30/FR-31)", async () => {
+    const ticketing: TicketingTriggerPort = { handle: vi.fn(async () => ({ enqueued: true })) };
+    configureOrchestratorRuntime(makeMinimalRuntime({ ticketing }));
+
+    const rejectState = makeState({ obligation_id: "obl-tk-3", task_id: "task-tk-3", tierDecision: { tier: "B", reasons: ["RISK_SCORE_TIER_B"] } });
+    await finalizeCommit(rejectState, "reject");
+
+    const disagreementState = makeState({ obligation_id: "obl-tk-4", task_id: "task-tk-4", tierDecision: { tier: "C", reasons: ["RISK_SCORE_TIER_C"] } });
+    await finalizeCommit(disagreementState, "disagreement");
+
+    expect(ticketing.handle).not.toHaveBeenCalled();
+  });
+
+  it("finalizeCommit's return value is identical whether or not rt.ticketing is configured (optional field, safely absent)", async () => {
+    const state = makeState({ obligation_id: "obl-tk-5", task_id: "task-tk-5", tierDecision: { tier: "A", reasons: ["BASE_TIER_A"] } });
+    configureOrchestratorRuntime(makeMinimalRuntime({ ticketing: undefined }));
+
+    const result = await finalizeCommit(state, "tier_a");
+
+    expect(result).toBe(true);
   });
 });

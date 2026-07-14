@@ -11,7 +11,15 @@ export type LedgerEventType =
   | "EVIDENCE_HASH_MISMATCH" // this unit, via ingestEvidenceArtifact (outcome === "hash_mismatch")
   | "SLA_APPROACHING" // this unit, via scanForSlaGaps state-transition (FR-10)
   | "SLA_BREACHED" // this unit, via scanForSlaGaps state-transition (FR-10)
-  | "CHAIN_VERIFICATION_RUN"; // this unit, via verifyChainIntegrity (successful runs only, see FR-32)
+  | "CHAIN_VERIFICATION_RUN" // this unit, via verifyChainIntegrity (successful runs only, see FR-32)
+  // --- Spec 13 (GRC/Ticketing Integration) additive extension. Logged by
+  // @sentinel-act/ticketing-adapter's processOutboxOnce (FR-15/FR-17) via
+  // this package's AuditLedgerPort, narrowed to AppendLedgerEntryPort on
+  // that side. Purely additive — see Spec 13 §13 item 2. ---
+  | "TICKET_CREATED"
+  | "TICKET_CREATE_FAILED"
+  | "TICKET_UPDATED"
+  | "TICKET_UPDATE_FAILED";
 
 export interface LedgerActor {
   type: "agent" | "human" | "system";
